@@ -4,7 +4,7 @@ A multi-dimensional category scoring + action guidance system for Amazon marketp
 
 This is a **public demo** of the full project, with data anonymized and content selectively disclosed.
 
-🔗 **Live demo**: _(deploy to Streamlit Cloud — link goes here)_
+🔗 **Live demo**: https://amazon-rank-demo-elita.streamlit.app/
 
 ---
 
