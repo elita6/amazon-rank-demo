@@ -1,0 +1,23 @@
+[theme]
+primaryColor = "#1e3a5f"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f7fa"
+textColor = "#1a2940"
+font = "sans serif"
+
+[browser]
+# 关闭匿名使用统计上报 — 离线展示时避免启动卡 5-10 秒等连接 streamlit.io 超时
+gatherUsageStats = false
+
+[client]
+# 隐藏右上 hamburger menu 中的 "View app source" / "Manage app" / dev 选项
+toolbarMode = "viewer"
+# 出错时不在浏览器显示 Python traceback（避免暴露文件路径 / 函数名 / 库依赖）
+showErrorDetails = "none"
+
+[server]
+# 生产部署关闭文件变化自动 rerun，节省 CPU
+runOnSave = false
+# 保留默认 CORS / XSRF 防护（Streamlit Cloud 部署用户无需关心）
+enableCORS = true
+enableXsrfProtection = true

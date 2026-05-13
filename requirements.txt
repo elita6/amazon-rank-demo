@@ -1,0 +1,7 @@
+# demo/requirements.txt
+# 更新日期：2026-05-12
+# 用途：Streamlit Cloud 部署的 Python 依赖清单
+streamlit>=1.30
+pandas>=2.0
+numpy>=1.24
+plotly>=5.18
