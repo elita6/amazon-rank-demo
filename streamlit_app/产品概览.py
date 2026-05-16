@@ -1,5 +1,5 @@
 # demo/streamlit_app/产品概览.py
-# 更新日期：2026-05-12
+# 更新日期：2026-05-16
 # 用途：Demo 入口页 — 产品定位 + 数据流 + 6 页架构 + 方法论概览
 # 启动：streamlit run demo/streamlit_app/产品概览.py
 
@@ -264,8 +264,7 @@ st.markdown("<div style='height:30px;'></div>", unsafe_allow_html=True)
 st.markdown(
     "<div style='border-top:1px solid #e2e8f0; padding-top:14px; "
     "font-size:0.78rem; color:#94a3b8; text-align:center;'>"
-    "© Elita · 2026 · Built with Streamlit · "
-    "<i>Demo 版用于作品集展示，完整版含详细方法论文档与生产数据</i>"
+    "© Elita · 2026"
     "</div>",
     unsafe_allow_html=True,
 )
