@@ -1,0 +1,34 @@
+# 文件: .github/workflows/keepalive.yml
+# 更新日期: 2026-05-16
+# 用途: 定时访问 Streamlit Cloud demo，防止免费版因 7 天无访问自动休眠
+# 主要改动: 初始版本 — 每 3 天 UTC 02:00 (北京时间 10:00) 触发，支持手动 workflow_dispatch
+
+name: Keep Streamlit demo alive
+
+on:
+  schedule:
+    - cron: "0 2 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Playwright + Chromium
+        run: |
+          pip install --quiet playwright
+          playwright install --with-deps chromium
+
+      - name: Visit demo (wake if sleeping)
+        run: python .github/scripts/keepalive.py
+        env:
+          DEMO_URL: https://amazon-rank-demo-elita.streamlit.app/
