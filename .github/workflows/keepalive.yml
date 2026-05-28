@@ -1,19 +1,22 @@
 # 文件: .github/workflows/keepalive.yml
-# 更新日期: 2026-05-16
+# 更新日期: 2026-05-28
 # 用途: 定时访问 Streamlit Cloud demo，防止免费版因 7 天无访问自动休眠
-# 主要改动: 初始版本 — 每 3 天 UTC 02:00 (北京时间 10:00) 触发，支持手动 workflow_dispatch
+# 主要改动:
+#   - 2026-05-16: 初始版本，每 3 天 UTC 02:00 触发
+#   - 2026-05-28: cron 改为每天 UTC 02:00（北京时间 10:00），7 天窗口留 7 次重试机会；
+#                 timeout 8→12 分钟（脚本本身可能等 stApp 最长 3 分钟 + 唤醒等待）
 
 name: Keep Streamlit demo alive
 
 on:
   schedule:
-    - cron: "0 2 */3 * *"
+    - cron: "0 2 * * *"
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
