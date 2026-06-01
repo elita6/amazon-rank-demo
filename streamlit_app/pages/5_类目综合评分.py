@@ -149,8 +149,7 @@ app_header()
 st.markdown(
     "<div style='background:#fff7ed; border-left:4px solid #f59e0b; "
     "padding:8px 14px; margin: 4px 0 10px 0; border-radius:4px; font-size:0.85rem; color:#7c2d12;'>"
-    "🎭 <b>Demo Mode</b> — 节选5类目作为展示（覆盖 5 种 strategy）  · "
-    "完整版含 18 类目"
+    "🎭 <b>Demo Mode</b> — 节选5类目作为展示（覆盖 5 种 strategy）。 "
     "</div>",
     unsafe_allow_html=True,
 )
