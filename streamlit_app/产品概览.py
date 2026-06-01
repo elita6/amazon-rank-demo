@@ -88,7 +88,7 @@ app_header()
 st.markdown(
     "<div style='background:#fff7ed; border-left:4px solid #f59e0b; "
     "padding:8px 14px; margin: 4px 0 10px 0; border-radius:4px; font-size:0.85rem; color:#7c2d12;'>"
-    "🎭 <b>Demo Mode</b> — 公开 6 / 6 页 · 类目/品牌/ASIN已匿名化 · "
+    "🎭 <b>Demo Mode</b> — 类目/品牌/ASIN已匿名化。 "
     "</div>",
     unsafe_allow_html=True,
 )
