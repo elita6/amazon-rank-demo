@@ -1,11 +1,15 @@
 # demo/streamlit_app/pages/跨榜联动.py
-# 更新日期：2026-06-01
+# 更新日期：2026-06-03
 # 用途：Demo 版跨榜联动页（数据脱敏 + 5 类目）— BS/NR/MS 三榜联动，3 按钮切换
 # 启动：streamlit run demo/streamlit_app/产品概览.py
 # 与生产版差异：
 #   - 数据源从 v1/data/amazon.db 改为 demo/data/*.csv（in-memory sqlite，connect_demo）
 #   - 类目缩减为 5（Category A ~ E）；品牌/ASIN 已匿名化，价格/评论数 ±5% 扰动
 #   - 流转漏斗 / NR·MS→BS 渗透 / MS 爆发强度 逻辑与生产版完全一致
+# 主要改动：
+#   - 2026-06-03：修复流转漏斗对比表 ImportError —— 改用手写 Blues rgba 色阶替换
+#                 Styler.background_gradient(cmap=...)，去除对 matplotlib 的依赖
+#                 （Streamlit Cloud requirements.txt 未含 matplotlib）
 
 import sys
 from pathlib import Path
@@ -204,9 +208,20 @@ if view == "funnel":
 
         ret_cols = ["入口→BS%", "BS→Top50%", "Top50→Top10%"]
         ret_max = max(float(cmp_df[ret_cols].max().max() or 0), 10.0)
-        styler = (cmp_df.style
-                  .background_gradient(subset=ret_cols, cmap="Blues",
-                                       vmin=0, vmax=ret_max))
+
+        # Blues 色阶（手写 rgba，避免依赖 matplotlib —— Streamlit Cloud 未装 matplotlib，
+        # 原 .background_gradient(cmap="Blues") 会触发 ImportError）
+        def _blue_grad(val, vmax=ret_max):
+            if pd.isna(val) or vmax <= 0:
+                return ""
+            t = min(max(val / vmax, 0.0), 1.0)
+            r = int(round(247 - t * (247 - 33)))
+            g = int(round(251 - t * (251 - 113)))
+            b = int(round(255 - t * (255 - 181)))
+            txt = "#ffffff" if t > 0.55 else "#0f2943"
+            return f"background-color: rgb({r},{g},{b}); color: {txt};"
+
+        styler = cmp_df.style.map(_blue_grad, subset=ret_cols)
         column_config = {
             "类目":   st.column_config.TextColumn("类目", pinned=True, width="medium"),
             "入口集": st.column_config.NumberColumn(format="%d", width="small"),
