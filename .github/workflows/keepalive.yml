@@ -1,23 +1,32 @@
 # 文件: .github/workflows/keepalive.yml
-# 更新日期: 2026-05-28
-# 用途: 定时访问 Streamlit Cloud demo，防止免费版因 7 天无访问自动休眠
+# 更新日期: 2026-06-03
+# 用途: 定时访问 Streamlit Cloud demo，防止免费版因长时间无访问自动休眠
 # 主要改动:
 #   - 2026-05-16: 初始版本，每 3 天 UTC 02:00 触发
 #   - 2026-05-28 v2: cron 改为每天 UTC 02:00（北京 10:00），timeout 8→12 分钟
 #   - 2026-05-28 v3: 加 upload-artifact 步骤，失败时把脚本 dump 的 HTML + 截图挂到 run 页面
-#                    （always() 兜底，便于即便脚本异常退出也能拿到现场）
+#   - 2026-06-03 v4: 实测每天 1 次仍会休眠（Streamlit 休眠阈值已远短于「7 天」，约数小时）。
+#                    cron 改为每 30 分钟（公开仓库 Actions 分钟数免费，不计成本）；
+#                    加 Playwright 浏览器缓存，免去每次重复下载 Chromium、加快高频运行；
+#                    GitHub 定时任务有延迟/偶尔跳过属正常，间隔仍远小于休眠阈值。
+#                    注意：仓库连续 60 天无提交，GitHub 会自动停用定时任务（任意提交即恢复）。
 
 name: Keep Streamlit demo alive
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "*/30 * * * *"   # 每 30 分钟（UTC）
   workflow_dispatch:
+
+# 同一时刻只跑一个，避免上一轮没结束又起一轮
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -26,6 +35,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}
 
       - name: Install Playwright + Chromium
         run: |
