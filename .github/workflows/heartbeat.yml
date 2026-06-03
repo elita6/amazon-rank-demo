@@ -1,0 +1,38 @@
+# 文件: .github/workflows/heartbeat.yml
+# 创建日期: 2026-06-03
+# 用途: 每月自动提交一次时间戳，重置 GitHub「60 天无提交自动停用定时任务」计时器，
+#       保证 keepalive.yml 的 cron 永远不会被悄悄停用（形成闭环：
+#       heartbeat 保 cron 不停 → cron(keepalive) 保 app 不休眠）。
+# 说明: 若 push 报权限错误，去仓库 Settings → Actions → General →
+#       Workflow permissions 勾选「Read and write permissions」。
+
+name: Heartbeat (keep schedules alive)
+
+on:
+  schedule:
+    - cron: "0 3 1 * *"   # 每月 1 号 UTC 03:00（远小于 60 天阈值）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# 避免与自己并发
+concurrency:
+  group: heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Bump heartbeat timestamp & push
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .heartbeat
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .heartbeat
+          git commit -m "chore: heartbeat $(date -u +%Y-%m-%d)" || { echo "nothing to commit"; exit 0; }
+          git push
