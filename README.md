@@ -51,7 +51,7 @@ Information entropy · Multi-Criteria Decision Analysis (MCDA) · Pareto optimiz
 
 ```bash
 pip install -r requirements.txt
-streamlit run streamlit_app/产品概览.py
+streamlit run streamlit_app/app.py
 ```
 
 ## License

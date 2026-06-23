@@ -6,6 +6,8 @@
 #   - 数据源从 v1/data/amazon.db 改为 demo/data/*.csv（in-memory sqlite，connect_demo）
 #   - 类目缩减为 5（Category A ~ E）；品牌/ASIN 已匿名化，价格/评论数 ±5% 扰动
 #   - 三榜在榜时间/满榜率/流动率对比表 + box plot 逻辑与生产版完全一致
+# 主要改动：
+#   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
 
 import sys
 from pathlib import Path
@@ -16,7 +18,8 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "streamlit_app"))
-from _styles import inject_global_style, app_header, page_title, chart_title, conclusion, chart_spacer
+from _styles import page_title, chart_title, conclusion, chart_spacer
+from _i18n import t
 from _demo_data import connect_demo
 
 
@@ -53,8 +56,8 @@ WINDOW_OPTIONS = [7, 14]
 def window_radio(key, default=14):
     """时间窗口切换器：7d / 14d。窗口取自数据集 max(date) 倒数 N 天滑窗。"""
     return st.radio(
-        "时间窗口", options=WINDOW_OPTIONS,
-        format_func=lambda n: f"近 {n} 天",
+        t("时间窗口", "Time Window"), options=WINDOW_OPTIONS,
+        format_func=lambda n: t(f"近 {n} 天", f"Last {n} days"),
         index=WINDOW_OPTIONS.index(default), horizontal=True, key=key,
         label_visibility="collapsed",
     )
@@ -63,17 +66,16 @@ def window_radio(key, default=14):
 # =======================================================================
 # 页面
 # =======================================================================
-st.set_page_config(page_title="ASIN 流动性", layout="wide", initial_sidebar_state="collapsed")
-inject_global_style()
-app_header()
-page_title("ASIN 流动性")
+page_title(t("ASIN 流动性", "ASIN Liquidity"))
 
 # Demo banner
 st.markdown(
     "<div style='background:#fff7ed; border-left:4px solid #f59e0b; "
     "padding:8px 14px; margin: 4px 0 10px 0; border-radius:4px; font-size:0.85rem; color:#7c2d12;'>"
-    "🎭 <b>Demo Mode</b> — 节选 5 类目展示，品牌名/ASIN 已匿名化，价格/评论数 ±5% 扰动。"
-    "</div>",
+    "🎭 <b>Demo Mode</b> — "
+    + t("节选 5 类目展示，品牌名/ASIN 已匿名化，价格/评论数 ±5% 扰动。",
+        "Showcasing 5 sample categories; brands/ASINs anonymized, prices/review counts perturbed by ±5%.")
+    + "</div>",
     unsafe_allow_html=True,
 )
 
@@ -95,7 +97,7 @@ with st.container(border=True):
     # 表筛选：只留窗口（stacked：label 上 / radio 下）
     fc1, _ = st.columns([1, 4])
     with fc1:
-        st.markdown("<div class='filter-label'>📅 时间窗口</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='filter-label'>📅 {t('时间窗口', 'Time Window')}</div>", unsafe_allow_html=True)
         v3_window = window_radio(key="v3_window", default=14)
 
     end_date = asin_all["date"].max()
@@ -145,8 +147,8 @@ with st.container(border=True):
 
     if all(r is None for r in results.values()):
         with table_title_slot.container():
-            chart_title("类目对比表")
-        st.warning("当前筛选下无数据")
+            chart_title(t("类目对比表", "Category Comparison"))
+        st.warning(t("当前筛选下无数据", "No data for the current filter"))
     else:
         # ---- 拼 MultiIndex 宽表（BS/NR/MS 分组表头）----
         all_cats = sorted(set().union(
@@ -190,15 +192,19 @@ with st.container(border=True):
                               ignore_index=True)
         flow_max_pct = max(float(flow_vals.max() or 0) * 1.1, 10.0) if not flow_vals.empty else 10.0
 
-        window_caption = (f"近 {v3_window} 天" if actual_max == v3_window
-                          else f"近 {v3_window} 天 · 实采 {actual_max} 天")
+        window_caption = (
+            t(f"近 {v3_window} 天", f"Last {v3_window} days") if actual_max == v3_window
+            else t(f"近 {v3_window} 天 · 实采 {actual_max} 天",
+                   f"Last {v3_window} days · {actual_max} days sampled"))
 
         # ============================================================
         # 类目对比表（自定义 HTML：分组表头 + 对角斜线类目头 + 数据条 + 组间粗竖线）
         # 原因：streamlit st.dataframe(styler) 不渲染 Styler.bar 的 CSS gradient
         # ============================================================
         with table_title_slot.container():
-            chart_title(f"● 类目对比表 — 按 BS在榜中位时间降序（{window_caption}）")
+            chart_title(t(
+                f"● 类目对比表 — 按 BS在榜中位时间降序（{window_caption}）",
+                f"● Category Comparison — sorted by BS median time on list, desc ({window_caption})"))
 
         # 数据条 + 表格 HTML 渲染（每指标用 浅→深 渐变填充）
         BAR_GRADIENTS = {
@@ -212,6 +218,13 @@ with st.container(border=True):
             ("NR", ["中位在榜时间(天)", "满榜率", "流动率"]),
             ("MS", ["中位在榜时间(天)", "流动率"]),
         ]
+        # 指标键保持中文（同时用作 lookup key 与 BAR_GRADIENTS key）；
+        # 仅在表头显示处经此 map 转译
+        METRIC_LABELS = {
+            "中位在榜时间(天)": t("中位在榜时间(天)", "Median time on list (days)"),
+            "满榜率": t("满榜率", "Full-list rate"),
+            "流动率": t("流动率", "Turnover rate"),
+        }
 
         def _cell_html(val, metric, first_in_group):
             cls_extra = " group-start" if first_in_group else ""
@@ -237,11 +250,11 @@ with st.container(border=True):
         # 对角斜线角头：左上→右下 \ 形，右上=榜单、左下=类目
         parts.append(
             '<th rowspan="2" class="corner-cell">'
-            '<span class="corner-top">榜单</span>'
+            f'<span class="corner-top">{t("榜单", "List")}</span>'
             '<svg viewBox="0 0 100 100" preserveAspectRatio="none">'
             '<line x1="0" y1="0" x2="100" y2="100" stroke="#aaa" stroke-width="0.8"/>'
             "</svg>"
-            '<span class="corner-bot">类目</span>'
+            f'<span class="corner-bot">{t("类目", "Category")}</span>'
             "</th>"
         )
         for grp, metrics in GROUPS:
@@ -257,7 +270,7 @@ with st.container(border=True):
                     cls_list.append("group-start")
                 if m == "中位在榜时间(天)":
                     cls_list.append("col-narrow")
-                parts.append(f'<th class="{" ".join(cls_list)}">{m}</th>')
+                parts.append(f'<th class="{" ".join(cls_list)}">{METRIC_LABELS[m]}</th>')
         parts.append("</tr></thead><tbody>")
 
         # 数据行
@@ -300,12 +313,15 @@ with st.container(border=True):
     border-left: {BORDER} !important;
 }}
 .lifespan-cmp .corner-cell {{
-    position: relative;
+    position: sticky;        /* 固定类目列：左上角表头随横向滚动钉住 */
+    left: 0;
+    z-index: 3;              /* 高于数据格(默认)与 cat-cell(2)，滚动时压在最上 */
     min-width: 107px;     /* 160 × 2/3 ≈ 107，缩小 1/3 */
     width: 107px;
     height: 56px;
     background-color: #f0f4f8;
     padding: 0 !important;
+    border-right: 1px solid #d0d4dc;
 }}
 .lifespan-cmp .corner-cell svg {{
     position: absolute;
@@ -330,10 +346,14 @@ with st.container(border=True):
     width: 78px;
 }}
 .lifespan-cmp .cat-cell {{
+    position: sticky;        /* 固定类目列：横向滚动时钉在最左，类目名不跟丢 */
+    left: 0;
+    z-index: 2;              /* 高于普通数据格，滚动时数据格从其下方划过 */
     font-weight: 500;
     text-align: left !important;
     white-space: nowrap;
     background-color: white !important;
+    border-right: 1px solid #d0d4dc;
 }}
 .lifespan-cmp .empty-cell {{
     color: #aaa;
@@ -347,11 +367,16 @@ with st.container(border=True):
         )
 
         st.markdown(
-            f"<div style='font-size:0.68rem; color:#6b7280; line-height:1.7; margin-top:6px;'>"
-            f"* 中位在榜时间：ASIN在窗口期内出现天数的中位数<br>"
-            f"* 满榜率：在窗口期内一直在榜的 ASIN 占比<br>"
-            f"* 流动率：每天平均有百分之几的 ASIN 被替换，比率越高说明榜单新陈代谢越快"
-            f"</div>",
+            "<div style='font-size:0.68rem; color:#6b7280; line-height:1.7; margin-top:6px;'>"
+            + t("* 中位在榜时间：ASIN在窗口期内出现天数的中位数",
+                "* Median time on list: median number of days an ASIN appears within the window")
+            + "<br>"
+            + t("* 满榜率：在窗口期内一直在榜的 ASIN 占比",
+                "* Full-list rate: share of ASINs that stay on the list throughout the window")
+            + "<br>"
+            + t("* 流动率：每天平均有百分之几的 ASIN 被替换，比率越高说明榜单新陈代谢越快",
+                "* Turnover rate: average share of ASINs replaced per day; a higher rate means faster list churn")
+            + "</div>",
             unsafe_allow_html=True,
         )
 
@@ -366,10 +391,10 @@ with st.container(border=True):
         # 筛选行（stacked：label 上 / radio 下）
         bf1, bf2, _ = st.columns([1, 1, 3])
         with bf1:
-            st.markdown("<div class='filter-label'>📊 榜单</div>", unsafe_allow_html=True)
-            v3_box_list = list_radio_3("榜单", key="v3_box_list", default="best_seller")
+            st.markdown(f"<div class='filter-label'>📊 {t('榜单', 'List')}</div>", unsafe_allow_html=True)
+            v3_box_list = list_radio_3(t("榜单", "List"), key="v3_box_list", default="best_seller")
         with bf2:
-            st.markdown("<div class='filter-label'>📅 时间窗口</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='filter-label'>📅 {t('时间窗口', 'Time Window')}</div>", unsafe_allow_html=True)
             v3_box_window = window_radio(key="v3_box_window", default=14)
 
         start_date_box = end_date - pd.Timedelta(days=v3_box_window - 1)
@@ -378,22 +403,28 @@ with st.container(border=True):
                           & (asin_all["date"] <= end_date)]
         if df_box.empty:
             with title_slot.container():
-                chart_title("● 各榜单ASIN在榜时间分布|按类目")
-            st.warning("box plot 当前筛选下无数据")
+                chart_title(t("● 各榜单ASIN在榜时间分布|按类目",
+                              "● ASIN time-on-list distribution by category"))
+            st.warning(t("box plot 当前筛选下无数据",
+                         "No data for the box plot under the current filter"))
         else:
             box_actual = int(df_box["date"].nunique())
             life_box = (df_box.groupby(["category", "asin"])
                         .agg(life_days=("date", "nunique")).reset_index())
             cat_order_box = (life_box.groupby("category")["life_days"].median()
                              .sort_values(ascending=False).index.tolist())
-            box_window_caption = (f"近 {v3_box_window} 天" if box_actual == v3_box_window
-                                  else f"近 {v3_box_window} 天 · 实采 {box_actual} 天")
+            box_window_caption = (
+                t(f"近 {v3_box_window} 天", f"Last {v3_box_window} days") if box_actual == v3_box_window
+                else t(f"近 {v3_box_window} 天 · 实采 {box_actual} 天",
+                       f"Last {v3_box_window} days · {box_actual} days sampled"))
 
             with title_slot.container():
-                chart_title(f"● 各榜单ASIN在榜时间分布|按类目（{LIST_LABELS_3[v3_box_list]} · {box_window_caption}）")
+                chart_title(t(
+                    f"● 各榜单ASIN在榜时间分布|按类目（{LIST_LABELS_3[v3_box_list]} · {box_window_caption}）",
+                    f"● ASIN time-on-list distribution by category ({LIST_LABELS_3[v3_box_list]} · {box_window_caption})"))
             fig = px.box(life_box, x="category", y="life_days",
                          category_orders={"category": cat_order_box},
-                         labels={"category": "", "life_days": "在榜时间"},
+                         labels={"category": "", "life_days": t("在榜时间", "Time on list")},
                          height=480)
             fig.update_traces(marker_color="#5b8fc4", line_color="#5b8fc4",
                               fillcolor="#a8cfee")

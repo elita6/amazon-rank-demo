@@ -10,6 +10,7 @@
 #   - 2026-06-03：修复流转漏斗对比表 ImportError —— 改用手写 Blues rgba 色阶替换
 #                 Styler.background_gradient(cmap=...)，去除对 matplotlib 的依赖
 #                 （Streamlit Cloud requirements.txt 未含 matplotlib）
+#   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
 
 import sys
 from pathlib import Path
@@ -21,7 +22,8 @@ import plotly.graph_objects as go
 import streamlit as st
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "streamlit_app"))
-from _styles import inject_global_style, app_header, page_title, chart_title, conclusion, chart_spacer
+from _styles import page_title, chart_title, conclusion, chart_spacer
+from _i18n import t
 from _demo_data import connect_demo
 
 
@@ -69,8 +71,10 @@ def load_data():
     return asin, summary
 
 
-def category_popover(key_prefix, cats, label="类目选择"):
+def category_popover(key_prefix, cats, label=None):
     """同 ASIN 流动性 / 类目详情 popover 风格。"""
+    if label is None:
+        label = t("类目选择", "Category Filter")
     inner = f"{key_prefix}_cats_inner"
     if inner not in st.session_state:
         st.session_state[inner] = list(cats)
@@ -83,13 +87,14 @@ def category_popover(key_prefix, cats, label="类目选择"):
         st.session_state[inner] = []
 
     st.markdown(f"<div class='filter-label'>🔍 {label}</div>", unsafe_allow_html=True)
-    with st.popover(f"已选 {n_sel} / {n_tot}", use_container_width=False):
+    with st.popover(t(f"已选 {n_sel} / {n_tot}", f"Selected {n_sel} / {n_tot}"),
+                    use_container_width=False):
         b1, b2 = st.columns(2)
-        b1.button("✓ 全选", key=f"{key_prefix}_btn_all",
+        b1.button(t("✓ 全选", "✓ Select All"), key=f"{key_prefix}_btn_all",
                   on_click=_all, use_container_width=True)
-        b2.button("✗ 全不选", key=f"{key_prefix}_btn_none",
+        b2.button(t("✗ 全不选", "✗ Clear"), key=f"{key_prefix}_btn_none",
                   on_click=_none, use_container_width=True)
-        st.multiselect("勾选类目", options=cats,
+        st.multiselect(t("勾选类目", "Select categories"), options=cats,
                        key=inner, label_visibility="collapsed")
     return st.session_state[inner] or list(cats)
 
@@ -102,17 +107,17 @@ def filter_label_spacer():
 # =======================================================================
 # 页面
 # =======================================================================
-st.set_page_config(page_title="跨榜联动", layout="wide", initial_sidebar_state="collapsed")
-inject_global_style()
-app_header()
-page_title("跨榜联动")
+page_title(t("跨榜联动", "Cross-List Linkage"))
 
 # Demo banner
 st.markdown(
     "<div style='background:#fff7ed; border-left:4px solid #f59e0b; "
     "padding:8px 14px; margin: 4px 0 10px 0; border-radius:4px; font-size:0.85rem; color:#7c2d12;'>"
-    "🎭 <b>Demo Mode</b> — 节选 5 类目展示，品牌名/ASIN 已匿名化，价格/评论数 ±5% 扰动。"
-    "</div>",
+    "🎭 <b>Demo Mode</b> — "
+    + t("节选 5 类目展示，品牌名/ASIN 已匿名化，价格/评论数 ±5% 扰动。",
+        "Showing 5 sample categories; brand names/ASINs anonymized, "
+        "prices/review counts perturbed ±5%.")
+    + "</div>",
     unsafe_allow_html=True,
 )
 
@@ -129,9 +134,9 @@ main_cats = sorted(asin_all["category"].unique().tolist())
 # 4 按钮切换
 # =======================================================================
 S4_VIEWS = {
-    "funnel":    "流转漏斗",
-    "lag_to_bs": "NR/MS→BS渗透",
-    "ms_burst":  "MS爆发强度",
+    "funnel":    t("流转漏斗", "Flow Funnel"),
+    "lag_to_bs": t("NR/MS→BS渗透", "BS Penetration"),
+    "ms_burst":  t("MS爆发强度", "MS Burst Intensity"),
 }
 if "s4_view" not in st.session_state:
     st.session_state.s4_view = "funnel"
@@ -164,7 +169,7 @@ if view == "funnel":
         title_col, src_col = st.columns([3, 1])
         with src_col:
             v3_src = st.radio(
-                "源榜单", options=["new_release", "movers_shakers", "union"],
+                t("源榜单", "Source list"), options=["new_release", "movers_shakers", "union"],
                 format_func=lambda k: {"new_release": "NR",
                                         "movers_shakers": "MS",
                                         "union": "NR ∪ MS"}[k],
@@ -204,9 +209,15 @@ if view == "funnel":
 
         src_label = {"new_release": "NR", "movers_shakers": "MS", "union": "NR∪MS"}[v3_src]
         with title_col:
-            chart_title(f"● 类目对比表（按 入口→BS% 降序，入口={src_label}）")
+            chart_title(t(f"● 类目对比表（按 入口→BS% 降序，入口={src_label}）",
+                          f"● Category comparison (by Entry→BS% desc, entry={src_label})"))
 
         ret_cols = ["入口→BS%", "BS→Top50%", "Top50→Top10%"]
+        ret_labels = {
+            "入口→BS%":     t("入口→BS%", "Entry→BS%"),
+            "BS→Top50%":    t("BS→Top50%", "BS→Top50%"),
+            "Top50→Top10%": t("Top50→Top10%", "Top50→Top10%"),
+        }
         ret_max = max(float(cmp_df[ret_cols].max().max() or 0), 10.0)
 
         # Blues 色阶（手写 rgba，避免依赖 matplotlib —— Streamlit Cloud 未装 matplotlib，
@@ -223,16 +234,21 @@ if view == "funnel":
 
         styler = cmp_df.style.map(_blue_grad, subset=ret_cols)
         column_config = {
-            "类目":   st.column_config.TextColumn("类目", pinned=True, width="medium"),
-            "入口集": st.column_config.NumberColumn(format="%d", width="small"),
-            "进 BS":  st.column_config.NumberColumn(format="%d", width="small"),
-            "Top50":  st.column_config.NumberColumn(format="%d", width="small"),
-            "Top10":  st.column_config.NumberColumn(format="%d", width="small"),
+            "类目":   st.column_config.TextColumn(t("类目", "Category"),
+                                                 pinned=True, width="medium"),
+            "入口集": st.column_config.NumberColumn(t("入口集", "Entry pool"),
+                                                   format="%d", width="small"),
+            "进 BS":  st.column_config.NumberColumn(t("进 BS", "Reached BS"),
+                                                   format="%d", width="small"),
+            "Top50":  st.column_config.NumberColumn("Top50", format="%d", width="small"),
+            "Top10":  st.column_config.NumberColumn("Top10", format="%d", width="small"),
         }
         for c in ret_cols:
             column_config[c] = st.column_config.NumberColumn(
-                c, format="%.2f%%",
-                help=f"3 个留存率列共享色阶 max={ret_max:.2f}%（自适应数据峰值）",
+                ret_labels[c], format="%.2f%%",
+                help=t(f"3 个留存率列共享色阶 max={ret_max:.2f}%（自适应数据峰值）",
+                       f"3 retention columns share a color scale max={ret_max:.2f}% "
+                       f"(auto-fit to data peak)"),
                 width="small",
             )
         st.dataframe(
@@ -242,20 +258,22 @@ if view == "funnel":
         )
 
         chart_spacer()
-        chart_title("● 类目下钻 funnel（选某类目看 4 阶段流转细节）")
+        chart_title(t("● 类目下钻 funnel（选某类目看 4 阶段流转细节）",
+                      "● Category drill-down funnel (pick a category to see 4-stage flow detail)"))
         drill_cat = st.selectbox(
-            "下钻类目", options=cmp_df["类目"].tolist(),
+            t("下钻类目", "Drill-down category"), options=cmp_df["类目"].tolist(),
             index=0, key="v3_funnel_drill_cat", label_visibility="collapsed",
         )
         drill_r = _funnel_stages(asin_all[asin_all["category"] == drill_cat])
         if drill_r["入口集"] == 0:
-            st.warning(f"{drill_cat} 当前源榜入口集为空")
+            st.warning(t(f"{drill_cat} 当前源榜入口集为空",
+                         f"{drill_cat} has an empty entry pool for the current source list"))
         else:
             STAGES = [
-                ("曾在源榜出现",  drill_r["入口集"]),
-                ("后来进 BS",     drill_r["进 BS"]),
-                ("进过 BS Top50", drill_r["Top50"]),
-                ("进过 BS Top10", drill_r["Top10"]),
+                (t("曾在源榜出现", "Appeared on source list"),  drill_r["入口集"]),
+                (t("后来进 BS", "Later reached BS"),     drill_r["进 BS"]),
+                (t("进过 BS Top50", "Reached BS Top50"), drill_r["Top50"]),
+                (t("进过 BS Top10", "Reached BS Top10"), drill_r["Top10"]),
             ]
             FUNNEL_COLORS = ["#5b8fc4", "#48a4d9", "#27ae60", "#e67e22"]
             fig = go.Figure(go.Funnel(
@@ -274,13 +292,13 @@ if view == "funnel":
 # =======================================================================
 elif view == "ms_burst":
     with st.container(border=True):
-        st.markdown("**● MS爆发强度**")
+        st.markdown(t("**● MS爆发强度**", "**● MS Burst Intensity**"))
 
         df = asin_all[asin_all["list_type"] == "movers_shakers"].copy()
         df = df.dropna(subset=["pct_chg_sales_rank"])
 
         if df.empty:
-            st.warning("无 MS 数据")
+            st.warning(t("无 MS 数据", "No MS data"))
         else:
             n_asin = df["asin"].nunique()
             med_pct = df["pct_chg_sales_rank"].median()
@@ -288,16 +306,21 @@ elif view == "ms_burst":
             max_pct = df["pct_chg_sales_rank"].max()
 
             cs1, cs2, cs3, cs4 = st.columns(4)
-            cs1.metric("MS 涉及 ASIN 数", f"{n_asin:,}")
-            cs2.metric("中位 排名提升率", f"{med_pct:,.0f}%",
-                       help="该量定义：(上次排名 − 当日排名) / 上次排名 × 100%；"
-                            "中位 = 典型 ASIN 一天内的排名跳升幅度")
-            cs3.metric("P90 排名提升率", f"{p90_pct:,.0f}%",
-                       help="90 分位 — 90% 的 ASIN 提升率低于此值，10% 尾部跳升更猛")
-            cs4.metric("单条最大", f"{max_pct:,.0f}%")
+            cs1.metric(t("MS 涉及 ASIN 数", "ASINs in MS"), f"{n_asin:,}")
+            cs2.metric(t("中位 排名提升率", "Median Rank Gain"), f"{med_pct:,.0f}%",
+                       help=t("该量定义：(上次排名 − 当日排名) / 上次排名 × 100%；"
+                              "中位 = 典型 ASIN 一天内的排名跳升幅度",
+                              "Defined as (previous rank − current rank) / previous rank "
+                              "× 100%; median = typical single-day rank jump of an ASIN"))
+            cs3.metric(t("P90 排名提升率", "P90 Rank Gain"), f"{p90_pct:,.0f}%",
+                       help=t("90 分位 — 90% 的 ASIN 提升率低于此值，10% 尾部跳升更猛",
+                              "90th percentile — 90% of ASINs gain less than this; "
+                              "the top 10% tail jumps even harder"))
+            cs4.metric(t("单条最大", "Single max"), f"{max_pct:,.0f}%")
 
             chart_spacer()
-            chart_title("● 类目 排名提升率排行（中位升序，颜色 = P90 强度）")
+            chart_title(t("● 类目 排名提升率排行（中位升序，颜色 = P90 强度）",
+                          "● Category rank-gain ranking (median asc, color = P90 intensity)"))
             df_pos = df[df["pct_chg_sales_rank"] > 0]
             cat_burst = (df_pos.groupby("category")
                          .agg(median_pct=("pct_chg_sales_rank", "median"),
@@ -316,10 +339,14 @@ elif view == "ms_burst":
                                           x=1.08, xpad=10),
                             line=dict(color="#5b8fc4", width=0.5)),
                 customdata=cat_burst[["p90_pct", "ratio", "n_asin"]].values,
-                hovertemplate=("%{y}<br>中位 %{x:,.0f}%"
-                               "<br>P90 %{customdata[0]:,.0f}%"
-                               "<br>尾部倍数 %{customdata[1]:.1f}× (P90/中位)"
-                               "<br>ASIN 数 %{customdata[2]:,.0f}<extra></extra>"),
+                hovertemplate=t("%{y}<br>中位 %{x:,.0f}%"
+                                "<br>P90 %{customdata[0]:,.0f}%"
+                                "<br>尾部倍数 %{customdata[1]:.1f}× (P90/中位)"
+                                "<br>ASIN 数 %{customdata[2]:,.0f}<extra></extra>",
+                                "%{y}<br>Median %{x:,.0f}%"
+                                "<br>P90 %{customdata[0]:,.0f}%"
+                                "<br>Tail ratio %{customdata[1]:.1f}× (P90/median)"
+                                "<br>ASINs %{customdata[2]:,.0f}<extra></extra>"),
                 text=[f"{v:,.0f}% · <span style='color:#c0392b'><b>{r:.1f}×</b></span>"
                       for v, r in zip(cat_burst["median_pct"], cat_burst["ratio"])],
                 textposition="outside",
@@ -327,14 +354,16 @@ elif view == "ms_burst":
             ))
             fig1.update_layout(
                 height=max(360, 26 * len(cat_burst)),
-                xaxis_title="中位 排名提升率 (%)",
+                xaxis_title=t("中位 排名提升率 (%)", "Median rank gain (%)"),
                 yaxis_title=None,
                 margin=dict(l=10, r=200, t=10, b=10),
             )
             st.plotly_chart(fig1, width="stretch")
 
             chart_spacer()
-            chart_title("● 每日中位 排名提升率幅度 by 类目（平滑曲线；Top 5 高亮粗线，其余细线半透明）")
+            chart_title(t("● 每日中位 排名提升率幅度 by 类目（平滑曲线；Top 5 高亮粗线，其余细线半透明）",
+                          "● Daily median rank gain by category (smoothed; Top 5 bold, "
+                          "others thin and semi-transparent)"))
             day_cat = (df.groupby(["date", "category"])
                        ["pct_chg_sales_rank"].median()
                        .reset_index().sort_values("date"))
@@ -359,7 +388,8 @@ elif view == "ms_burst":
                     opacity=0.55,
                     showlegend=False,
                     hovertemplate=("<b>" + cat + "</b><br>%{x|%Y-%m-%d}"
-                                   "<br>中位 排名提升率 %{y:,.0f}%<extra></extra>"),
+                                   + t("<br>中位 排名提升率 %{y:,.0f}%<extra></extra>",
+                                       "<br>Median rank gain %{y:,.0f}%<extra></extra>")),
                 ))
             # 再画 Top 5（粗线+markers，覆盖在上层）
             for cat in cat_rank.head(5)["category"]:
@@ -371,19 +401,21 @@ elif view == "ms_burst":
                               shape="spline", smoothing=0.7),
                     marker=dict(size=7),
                     hovertemplate=("<b>" + cat + "</b><br>%{x|%Y-%m-%d}"
-                                   "<br>中位 排名提升率 %{y:,.0f}%<extra></extra>"),
+                                   + t("<br>中位 排名提升率 %{y:,.0f}%<extra></extra>",
+                                       "<br>Median rank gain %{y:,.0f}%<extra></extra>")),
                 ))
             fig2.update_layout(
                 height=480, margin=dict(l=10, r=10, t=10, b=80),
-                xaxis_title="日期",
-                yaxis_title="中位 排名提升率 (%)",
+                xaxis_title=t("日期", "Date"),
+                yaxis_title=t("中位 排名提升率 (%)", "Median rank gain (%)"),
                 legend=dict(orientation="h", y=-0.20, x=0.5,
                             xanchor="center", yanchor="top"),
             )
             st.plotly_chart(fig2, width="stretch")
 
             chart_spacer()
-            chart_title("● Top 20 爆发 ASIN（按单条最大 pct_chg 排序）")
+            chart_title(t("● Top 20 爆发 ASIN（按单条最大 pct_chg 排序）",
+                          "● Top 20 burst ASINs (by single-event max pct_chg)"))
             top_evt = (df.sort_values("pct_chg_sales_rank", ascending=False)
                        .drop_duplicates("asin").head(20).copy())
             bs_asins = set(asin_all[asin_all["list_type"] == "best_seller"]["asin"].unique())
@@ -391,15 +423,15 @@ elif view == "ms_burst":
                 lambda a: "✓" if a in bs_asins else "—")
             show_evt = pd.DataFrame({
                 "ASIN":     top_evt["asin"],
-                "品牌":     top_evt["brand"].fillna("—"),
-                "类目":     top_evt["category"],
-                "事件日期": pd.to_datetime(top_evt["date"]).dt.strftime("%Y-%m-%d"),
-                "上次排名": top_evt["previous_sales_rank"].apply(
+                t("品牌", "Brand"):     top_evt["brand"].fillna("—"),
+                t("类目", "Category"):     top_evt["category"],
+                t("事件日期", "Event date"): pd.to_datetime(top_evt["date"]).dt.strftime("%Y-%m-%d"),
+                t("上次排名", "Previous rank"): top_evt["previous_sales_rank"].apply(
                     lambda v: f"{int(v):,}" if pd.notna(v) else "—"),
-                "当日排名": top_evt["sales_rank"].apply(
+                t("当日排名", "Current rank"): top_evt["sales_rank"].apply(
                     lambda v: f"{int(v):,}" if pd.notna(v) else "—"),
-                "排名提升率": top_evt["pct_chg_sales_rank"].apply(lambda v: f"{v:,.0f}%"),
-                "进过 BS": top_evt["进过BS"],
+                t("排名提升率", "Rank gain"): top_evt["pct_chg_sales_rank"].apply(lambda v: f"{v:,.0f}%"),
+                t("进过 BS", "Reached BS"): top_evt["进过BS"],
             })
             st.dataframe(show_evt, hide_index=True, width="stretch",
                          height=min(560, 38 + 36 * len(show_evt)))
@@ -434,7 +466,7 @@ elif view == "lag_to_bs":
         # 类目对比图（柱形=渗透率；NR=深蓝 / MS=浅蓝；双源同图）
         # ============================================================
         chart_title(
-            "● 类目渗透率对比"
+            t("● 类目渗透率对比", "● Category penetration comparison")
         )
 
         rows = []
@@ -458,19 +490,21 @@ elif view == "lag_to_bs":
         fig_cmp = go.Figure()
         fig_cmp.add_trace(go.Bar(
             x=cmp_all["类目"], y=cmp_all["nr_rate"],
-            name="NR→BS 渗透率", marker_color=COLOR_NR,
-            hovertemplate="<b>%{x}</b><br>NR→BS 渗透率 %{y:.1f}%<extra></extra>",
+            name=t("NR→BS 渗透率", "NR→BS penetration"), marker_color=COLOR_NR,
+            hovertemplate=t("<b>%{x}</b><br>NR→BS 渗透率 %{y:.1f}%<extra></extra>",
+                            "<b>%{x}</b><br>NR→BS penetration %{y:.1f}%<extra></extra>"),
         ))
         fig_cmp.add_trace(go.Bar(
             x=cmp_all["类目"], y=cmp_all["ms_rate"],
-            name="MS→BS 渗透率", marker_color=COLOR_MS,
-            hovertemplate="<b>%{x}</b><br>MS→BS 渗透率 %{y:.1f}%<extra></extra>",
+            name=t("MS→BS 渗透率", "MS→BS penetration"), marker_color=COLOR_MS,
+            hovertemplate=t("<b>%{x}</b><br>MS→BS 渗透率 %{y:.1f}%<extra></extra>",
+                            "<b>%{x}</b><br>MS→BS penetration %{y:.1f}%<extra></extra>"),
         ))
         fig_cmp.update_layout(
             barmode="group",
             height=520,
             xaxis=dict(tickangle=-30, title=None),
-            yaxis=dict(title="渗透率（%）", ticksuffix="%"),
+            yaxis=dict(title=t("渗透率（%）", "Penetration (%)"), ticksuffix="%"),
             margin=dict(l=10, r=10, t=20, b=130),
             legend=dict(orientation="h", y=-0.32, x=0.5,
                         xanchor="center", yanchor="top"),
@@ -483,10 +517,11 @@ elif view == "lag_to_bs":
         # 耗时分布 box plot（双源同图：NR / MS 并列；类目顺序与双源对比图一致）
         # ============================================================
         chart_title(
-            "● 类目上榜BS中位耗时分布"
+            t("● 类目上榜BS中位耗时分布",
+              "● Distribution of median days-to-BS by category")
         )
         if valid_nr.empty and valid_ms.empty:
-            st.warning("两源均无重叠 ASIN")
+            st.warning(t("两源均无重叠 ASIN", "No overlapping ASINs in either source"))
         else:
             box_df = pd.concat([
                 valid_nr.assign(src="NR→BS"),
@@ -500,7 +535,8 @@ elif view == "lag_to_bs":
                 category_orders={"category": box_order,
                                  "src": ["NR→BS", "MS→BS"]},
                 height=480,
-                labels={"category": "", "lag_days": "耗时（天）", "src": "源"},
+                labels={"category": "", "lag_days": t("耗时（天）", "Days"),
+                        "src": t("源", "Source")},
             )
             fig_box.update_layout(
                 boxmode="group",
@@ -516,7 +552,8 @@ elif view == "lag_to_bs":
         # ============================================================
         # 类目散点图（左 NR→BS / 右 MS→BS；不分象限，靠轴向方向直觉表达）
         # ============================================================
-        chart_title("● 类目跨榜渗透率X中位耗时交叉图")
+        chart_title(t("● 类目跨榜渗透率X中位耗时交叉图",
+                      "● Category cross plot: cross-list penetration × median days-to-BS"))
 
         def _draw_quad(median_col, rate_col, color, src_label):
             quad = (cmp_all[["类目", median_col, rate_col]]
@@ -527,7 +564,8 @@ elif view == "lag_to_bs":
             zero_cats = [c for c in cmp_all["类目"]
                          if c not in quad["类目"].tolist()]
             if quad.empty:
-                st.warning(f"{src_label} 无渗透 ASIN")
+                st.warning(t(f"{src_label} 无渗透 ASIN",
+                             f"{src_label} has no penetrating ASINs"))
                 return
             quad["类目短名"] = quad["类目"].map(CAT_SHORT).fillna(quad["类目"])
             x_min = float(quad["中位耗时(天)"].min())
@@ -567,11 +605,11 @@ elif view == "lag_to_bs":
                 custom_data=["类目", "中位耗时(天)", "渗透率"],
                 height=480,
             )
-            fig.update_xaxes(title_text="中位耗时（天）",
+            fig.update_xaxes(title_text=t("中位耗时（天）", "Median days-to-BS"),
                              showline=False, ticks="outside", ticklen=5,
                              showticklabels=True,
                              showgrid=False, zeroline=False)
-            fig.update_yaxes(title_text="渗透率（%）",
+            fig.update_yaxes(title_text=t("渗透率（%）", "Penetration (%)"),
                              showline=False, ticks="outside", ticklen=5,
                              showticklabels=True, ticksuffix="%",
                              showgrid=False, zeroline=False)
@@ -580,10 +618,13 @@ elif view == "lag_to_bs":
                 textfont=dict(size=11),
                 marker=dict(size=10, color=color,
                             line=dict(width=1, color="white")),
-                hovertemplate=(
+                hovertemplate=t(
                     "<b>%{customdata[0]}</b><br>"
                     "中位耗时: %{customdata[1]:.1f} 天<br>"
-                    "渗透率: %{customdata[2]:.1f}%<extra></extra>"
+                    "渗透率: %{customdata[2]:.1f}%<extra></extra>",
+                    "<b>%{customdata[0]}</b><br>"
+                    "Median days-to-BS: %{customdata[1]:.1f}<br>"
+                    "Penetration: %{customdata[2]:.1f}%<extra></extra>"
                 ),
             )
             # X 轴：底部水平箭头（向右）— axref/ayref 不接受 'paper'，用 'x domain'/'y domain'
@@ -604,20 +645,20 @@ elif view == "lag_to_bs":
             )
             # 快 / 慢 标签（红色）— X 轴方向，沿底部水平排列在同一 y 上
             fig.add_annotation(xref="x domain", yref="y domain",
-                               x=0.04, y=0.01, text="快", showarrow=False,
+                               x=0.04, y=0.01, text=t("快", "Fast"), showarrow=False,
                                font=dict(size=12, color="#c0392b"),
                                xanchor="left", yanchor="bottom")
             fig.add_annotation(xref="x domain", yref="y domain",
-                               x=0.99, y=0.01, text="慢", showarrow=False,
+                               x=0.99, y=0.01, text=t("慢", "Slow"), showarrow=False,
                                font=dict(size=12, color="#c0392b"),
                                xanchor="right", yanchor="bottom")
             # 难 / 易 标签（绿色）— Y 轴方向，沿左侧竖直排列在同一 x 上
             fig.add_annotation(xref="x domain", yref="y domain",
-                               x=0.01, y=0.05, text="难", showarrow=False,
+                               x=0.01, y=0.05, text=t("难", "Hard"), showarrow=False,
                                font=dict(size=12, color="#27ae60"),
                                xanchor="left", yanchor="bottom")
             fig.add_annotation(xref="x domain", yref="y domain",
-                               x=0.01, y=0.99, text="易", showarrow=False,
+                               x=0.01, y=0.99, text=t("易", "Easy"), showarrow=False,
                                font=dict(size=12, color="#27ae60"),
                                xanchor="left", yanchor="top")
             fig.update_layout(
@@ -630,7 +671,8 @@ elif view == "lag_to_bs":
             )
             st.plotly_chart(fig, width="stretch")
             if zero_cats:
-                st.caption(f"无渗透类目（不进图）：{'、'.join(zero_cats)}")
+                st.caption(t(f"无渗透类目（不进图）：{'、'.join(zero_cats)}",
+                             f"Categories with no penetration (excluded): {', '.join(zero_cats)}"))
 
         col_l, col_r = st.columns(2)
         with col_l:

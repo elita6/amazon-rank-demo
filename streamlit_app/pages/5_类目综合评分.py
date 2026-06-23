@@ -5,6 +5,8 @@
 #   - 数据源 db → demo csv（in-memory sqlite）
 #   - 默认权重 yaml inline（不依赖 scoring_config.yaml）
 #   - Top 10 → Top 5（数据子集只有 5 类目）
+# 主要改动：
+#   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
 
 import sys
 from pathlib import Path
@@ -18,7 +20,8 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from _styles import inject_global_style, app_header, page_title, chart_title
+from _styles import page_title, chart_title
+from _i18n import t
 from _demo_data import connect_demo
 
 
@@ -30,18 +33,18 @@ DIM_COLS = [
     "score_stability",
 ]
 DIM_LABELS = {
-    "score_market_size":  "市场规模 (S)",
-    "score_openness":     "市场开放度 (C)",
-    "score_new_product":  "新品空间 (N)",
-    "score_momentum":     "增长动能 (M)",
-    "score_stability":    "结构稳定 (T)",
+    "score_market_size":  t("市场规模 (S)", "Market Size (S)"),
+    "score_openness":     t("市场开放度 (C)", "Openness (C)"),
+    "score_new_product":  t("新品空间 (N)", "New-Product Room (N)"),
+    "score_momentum":     t("增长动能 (M)", "Momentum (M)"),
+    "score_stability":    t("结构稳定 (T)", "Stability (T)"),
 }
 DIM_TOOLTIPS = {
-    "score_market_size":  "偏好成熟大盘市场",
-    "score_openness":     "偏好更容易进入的市场",
-    "score_new_product":  "偏好新品成长机会",
-    "score_momentum":     "偏好趋势和短期爆发",
-    "score_stability":    "偏好稳定低波动市场",
+    "score_market_size":  t("偏好成熟大盘市场", "Favor large, mature markets"),
+    "score_openness":     t("偏好更容易进入的市场", "Favor markets that are easier to enter"),
+    "score_new_product":  t("偏好新品成长机会", "Favor new-product growth opportunities"),
+    "score_momentum":     t("偏好趋势和短期爆发", "Favor trend and short-term momentum"),
+    "score_stability":    t("偏好稳定低波动市场", "Favor stable, low-volatility markets"),
 }
 
 # 业务校准的项目特定参数（非通用配方；其他数据集需重新校准）
@@ -61,12 +64,19 @@ PRESETS = {
     "爆发型": {"score_market_size": 0.15, "score_openness": 0.20, "score_new_product": 0.25, "score_momentum": 0.35, "score_stability": 0.05},
     "默认":   DEFAULT_WEIGHTS,
 }
+# 展示用映射（PRESETS 的键必须保持中文用于 session_state / 查找，按钮显示走此表）
+PRESET_LABELS = {
+    "保守型": t("保守型", "Safe"),
+    "增长型": t("增长型", "Growth"),
+    "爆发型": t("爆发型", "Bold"),
+    "默认":   t("默认", "Default"),
+}
 # Tooltip 仅展示业务定位，不暴露具体权重数字（保留拖动 slider 时的真实交互）
 PRESET_HELP = {
-    "保守型": "重规模 + 稳定，低风险长期投入",
-    "增长型": "重新品 + 动能 + 开放度",
-    "爆发型": "重短期动能 + 新品爆发",
-    "默认":   "业务默认配置",
+    "保守型": t("重规模 + 稳定，低风险长期投入", "Emphasizes size + stability, low-risk long-term play"),
+    "增长型": t("重新品 + 动能 + 开放度", "Emphasizes new products + momentum + openness"),
+    "爆发型": t("重短期动能 + 新品爆发", "Emphasizes short-term momentum + new-product breakout"),
+    "默认":   t("业务默认配置", "Business default configuration"),
 }
 
 TAG_COLOR = {
@@ -142,23 +152,22 @@ def recompute(df, weights):
 # -----------------------------------------------------------------------
 # 页面
 # -----------------------------------------------------------------------
-st.set_page_config(page_title="类目综合评分 · Demo", layout="wide")
-inject_global_style()
-app_header()
-
 st.markdown(
     "<div style='background:#fff7ed; border-left:4px solid #f59e0b; "
     "padding:8px 14px; margin: 4px 0 10px 0; border-radius:4px; font-size:0.85rem; color:#7c2d12;'>"
-    "🎭 <b>Demo Mode</b> — 节选5类目作为展示（覆盖 5 种 strategy）。 "
-    "</div>",
+    "🎭 <b>Demo Mode</b> — "
+    + t("节选5类目作为展示（覆盖 5 种 strategy）。",
+        "Showing 5 sampled categories (covering 5 strategy types). ")
+    + "</div>",
     unsafe_allow_html=True,
 )
 
-page_title("类目综合评分")
+page_title(t("类目综合评分", "Composite Score"))
 
 df = load_scoring()
 if df.empty:
-    st.error("demo/data/category_summary.csv 没有评分数据")
+    st.error(t("demo/data/category_summary.csv 没有评分数据",
+               "No scoring data in demo/data/category_summary.csv"))
     st.stop()
 
 if st.session_state.get("_demo_p1_v") != 1:
@@ -217,16 +226,19 @@ st.markdown(
 )
 
 with st.sidebar:
-    st.header("策略偏好设置")
+    st.header(t("策略偏好设置", "Strategy Preferences"))
     st.markdown(
         '<div style="color:#9ca3af; font-size:0.7rem; margin-top:-6px; margin-bottom:14px; line-height:1.3;">'
-        '调整决策偏好，动态重算综合机会分'
-        '</div>',
+        + t("调整决策偏好，动态重算综合机会分",
+            "Adjust your decision preferences to dynamically recompute the opportunity score")
+        + '</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
-        '<div style="font-size:0.85rem; font-weight:600; color:#2c3e50; margin: 4px 0 16px 0;">快速预设</div>',
+        '<div style="font-size:0.85rem; font-weight:600; color:#2c3e50; margin: 4px 0 16px 0;">'
+        + t("快速预设", "Quick Presets")
+        + '</div>',
         unsafe_allow_html=True,
     )
     pcols = st.columns(4)
@@ -235,8 +247,8 @@ with st.sidebar:
         is_active = (active_preset == pname)
         with pcols[i]:
             btn_type = "primary" if is_active else "secondary"
-            tip = PRESET_HELP[pname] + ("（再次点击取消）" if is_active else "")
-            if st.button(pname, key=f"preset_{pname}", type=btn_type,
+            tip = PRESET_HELP[pname] + (t("（再次点击取消）", " (click again to deselect)") if is_active else "")
+            if st.button(PRESET_LABELS[pname], key=f"preset_{pname}", type=btn_type,
                          help=tip, use_container_width=True):
                 if is_active:
                     st.session_state["active_preset"] = None
@@ -268,34 +280,37 @@ avg_score = ranked["composite_score"].mean()
 crowded_pct = (ranked["strategy_tag"] == "Crowded").sum() / n_total if n_total > 0 else 0
 
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("分析类目数", f"{n_total}")
-k2.metric("高潜机会数", f"{n_high}", help="综合机会分 percentile ≥ 0.80")
-k3.metric("平均综合分", f"{avg_score:.2f}")
-k4.metric("Crowded 占比", f"{crowded_pct:.0%}", help="盘子大但开放度低的红海类目占比")
+k1.metric(t("分析类目数", "Categories analyzed"), f"{n_total}")
+k2.metric(t("高潜机会数", "High-potential count"), f"{n_high}",
+          help=t("综合机会分 percentile ≥ 0.80", "Opportunity score percentile ≥ 0.80"))
+k3.metric(t("平均综合分", "Avg composite score"), f"{avg_score:.2f}")
+k4.metric(t("Crowded 占比", "Crowded share"), f"{crowded_pct:.0%}",
+          help=t("盘子大但开放度低的红海类目占比",
+                 "Share of large but low-openness red-ocean categories"))
 
 # 上半区 3 panel
 top1, top2, top3 = st.columns([1.1, 1.6, 1.3])
 
 with top1:
-    chart_title("● 策略标签占比")
+    chart_title(t("● 策略标签占比", "● Strategy Tag Mix"))
     tag_cnt = (ranked["strategy_tag"].value_counts()
                .reindex(TAG_ORDER).fillna(0).astype(int).reset_index())
     tag_cnt.columns = ["tag", "n"]
     fig = px.bar(tag_cnt, x="n", y="tag", orientation="h", text="n",
                  color="tag", color_discrete_map=TAG_COLOR, height=420)
     fig.update_traces(textposition="outside")
-    fig.update_layout(showlegend=False, yaxis_title=None, xaxis_title="类目数",
+    fig.update_layout(showlegend=False, yaxis_title=None, xaxis_title=t("类目数", "Categories"),
                       yaxis=dict(categoryorder="array", categoryarray=TAG_ORDER[::-1]),
                       margin=dict(l=10, r=20, t=10, b=10))
     st.plotly_chart(fig, width="stretch")
 
 with top2:
-    chart_title("● 策略矩阵：综合机会分 × 结构稳定")
+    chart_title(t("● 策略矩阵：综合机会分 × 结构稳定", "● Strategy Matrix: Opportunity Score × Stability"))
     st.markdown(
         "<div style='font-size:0.70rem; color:#6b7280; font-weight:400; "
         "margin: -4px 0 8px 4px; line-height:1.3;'>"
-        "气泡 = log1p 月 GMV M"
-        "</div>",
+        + t("气泡 = log1p 月 GMV M", "Bubble = log1p monthly GMV ($M)")
+        + "</div>",
         unsafe_allow_html=True,
     )
     plot_df = ranked.copy()
@@ -309,30 +324,31 @@ with top2:
         hover_name="category",
         custom_data=["est_monthly_gmv_m"],
         size_max=36, height=420,
-        labels={"composite_score": "综合机会分 Opportunity Score",
-                "score_stability": "结构稳定 StabilityScore"},
+        labels={"composite_score": t("综合机会分 Opportunity Score", "Opportunity Score"),
+                "score_stability": t("结构稳定 StabilityScore", "Stability Score")},
     )
     fig.update_traces(
         hovertemplate=(
             "<b>%{hovertext}</b><br>"
-            "综合机会分：%{x:.2f}<br>"
-            "结构稳定：%{y:.2f}<br>"
-            "预估月 GMV：%{customdata[0]:.1f} M USD<extra></extra>"
+            + t("综合机会分：", "Opportunity Score: ") + "%{x:.2f}<br>"
+            + t("结构稳定：", "Stability: ") + "%{y:.2f}<br>"
+            + t("预估月 GMV：", "Est. monthly GMV: ") + "%{customdata[0]:.1f} M USD<extra></extra>"
         )
     )
     fig.add_vline(x=0.6, line_dash="dash", line_color="gray")
     fig.add_hline(y=0.6, line_dash="dash", line_color="gray")
-    fig.add_annotation(x=0.95, y=0.95, text="目标区 (高分+稳)",
+    fig.add_annotation(x=0.95, y=0.95, text=t("目标区 (高分+稳)", "Target zone (high score + stable)"),
                        showarrow=False, font=dict(color="gray", size=11))
-    fig.update_layout(legend_title_text="策略标签",
+    fig.update_layout(legend_title_text=t("策略标签", "Strategy Tag"),
                       margin=dict(l=10, r=10, t=10, b=10))
     st.plotly_chart(fig, width="stretch")
 
 with top3:
-    chart_title("● Top 3 综合分类目 · 5 维画像")
+    chart_title(t("● Top 3 综合分类目 · 5 维画像", "● Top 3 Categories · 5-Factor Profile"))
     top3_df = ranked.head(3)
     radar_dims = DIM_COLS
-    radar_labels = [DIM_LABELS[d].split(" ")[0] for d in radar_dims]
+    # 去掉末尾的 " (X)" 缩写后缀，中英文均适用（中文取前段，英文保留完整词组）
+    radar_labels = [DIM_LABELS[d].rsplit(" (", 1)[0] for d in radar_dims]
     fig = go.Figure()
     palette = ["#27ae60", "#3498db", "#e67e22"]
     for i, (_, row) in enumerate(top3_df.iterrows()):
@@ -354,7 +370,8 @@ with top3:
     st.plotly_chart(fig, width="stretch")
 
 # 下半区 Top 5 综合分柱
-chart_title("● Top 5 机会类目：综合分数 + 数据置信度（观察天数/14）")
+chart_title(t("● Top 5 机会类目：综合分数 + 数据置信度（观察天数/14）",
+              "● Top 5 Opportunity Categories: Composite Score + Data Confidence (days observed / 14)"))
 
 top5 = ranked.head(5).copy()
 top5["confidence"] = top5["days_observed"] / 14.0
@@ -363,8 +380,8 @@ fig = make_subplots(specs=[[{"secondary_y": True}]])
 fig.add_trace(
     go.Bar(
         x=top5["category"], y=top5["composite_score"],
-        marker=dict(color=[TAG_COLOR.get(t, "#bbbbbb") for t in top5["strategy_tag"]]),
-        name="综合分", text=top5["composite_score"].round(2), textposition="outside",
+        marker=dict(color=[TAG_COLOR.get(tag, "#bbbbbb") for tag in top5["strategy_tag"]]),
+        name=t("综合分", "Composite Score"), text=top5["composite_score"].round(2), textposition="outside",
     ),
     secondary_y=False,
 )
@@ -372,7 +389,7 @@ fig.add_trace(
     go.Scatter(
         x=top5["category"], y=top5["confidence"],
         mode="lines+markers",
-        name="数据置信度", line=dict(color="#c0392b", width=2),
+        name=t("数据置信度", "Data Confidence"), line=dict(color="#c0392b", width=2),
         marker=dict(size=10, symbol="diamond"),
     ),
     secondary_y=True,
@@ -383,7 +400,7 @@ fig.update_layout(
     margin=dict(l=10, r=10, t=10, b=80),
     legend=dict(orientation="h", y=1.05),
 )
-fig.update_yaxes(title_text="综合分", secondary_y=False, range=[0, 1.15])
-fig.update_yaxes(title_text="置信度 (days/14)", secondary_y=True, range=[0, 1.05])
+fig.update_yaxes(title_text=t("综合分", "Composite Score"), secondary_y=False, range=[0, 1.15])
+fig.update_yaxes(title_text=t("置信度 (days/14)", "Confidence (days/14)"), secondary_y=True, range=[0, 1.05])
 
 st.plotly_chart(fig, width="stretch")

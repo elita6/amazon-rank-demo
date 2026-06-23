@@ -6,6 +6,8 @@
 #   - 数据源从 v1/data/amazon.db 改为 demo/data/*.csv（in-memory sqlite）
 #   - 类目缩减为 5（Category A ~ E）— 覆盖 5 种 strategy
 #   - 品牌/ASIN 已匿名化，价格/评论数 ±5% 扰动
+# 主要改动：
+#   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
 
 import sys
 from pathlib import Path
@@ -16,15 +18,16 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "streamlit_app"))
-from _styles import inject_global_style, app_header, page_title, chart_title, chart_spacer
+from _styles import page_title, chart_title, chart_spacer
+from _i18n import t
 from _demo_data import connect_demo, market_heat_index
 
 
 LIST_LABELS = {
-    "all":            "综合（三榜合并）",
-    "best_seller":    "BS",
-    "new_release":    "NR",
-    "movers_shakers": "MS",
+    "all":            t("综合（三榜合并）", "All Lists (Merged)"),
+    "best_seller":    t("BS", "BS"),
+    "new_release":    t("NR", "NR"),
+    "movers_shakers": t("MS", "MS"),
 }
 LIST_OPTIONS_FULL = ["all", "best_seller", "new_release", "movers_shakers"]
 
@@ -53,7 +56,7 @@ def filter_by_list(df, list_choice):
 
 
 def list_suffix(list_choice):
-    return f"（{LIST_LABELS[list_choice]}）"
+    return t(f"（{LIST_LABELS[list_choice]}）", f" ({LIST_LABELS[list_choice]})")
 
 
 def list_radio(label, key, default="all", options=LIST_OPTIONS_FULL):
@@ -68,20 +71,20 @@ def list_radio(label, key, default="all", options=LIST_OPTIONS_FULL):
 # =======================================================================
 # 页面
 # =======================================================================
-st.set_page_config(page_title="类目详情 · Demo", layout="wide", initial_sidebar_state="collapsed")
-inject_global_style()
-app_header()
-
 # Demo banner
 st.markdown(
     "<div style='background:#fff7ed; border-left:4px solid #f59e0b; "
     "padding:8px 14px; margin: 4px 0 10px 0; border-radius:4px; font-size:0.85rem; color:#7c2d12;'>"
-    "🎭 <b>Demo Mode</b> — 节选5类目展示，品牌名/ASIN 已匿名化 ， 价格/评论数 ±5% 扰动 。 "
-    "</div>",
+    "🎭 <b>Demo Mode</b> — "
+    + t(
+        "节选5类目展示，品牌名/ASIN 已匿名化 ， 价格/评论数 ±5% 扰动 。 ",
+        "5 sample categories shown; brand names / ASINs anonymized, prices / review counts perturbed ±5%. ",
+    )
+    + "</div>",
     unsafe_allow_html=True,
 )
 
-page_title("类目详情")
+page_title(t("类目详情", "Category Detail"))
 
 asin, summary = load_data()
 
@@ -111,12 +114,12 @@ def _kpi(col, label, value, value_size="1.7rem", value_color="#222", value_weigh
 
 
 _kp1, _kp2, _kp3, _kp4 = st.columns(4)
-_kpi(_kp1, "分析类目数",     f"{len(main_cats)}")
-_kpi(_kp2, "ASIN 数(去重)",  f"{_n_asin:,}")
-_kpi(_kp3, "品牌数(去重)",   f"{_n_brand:,}")
-_kpi(_kp4, "数据时间范围",
+_kpi(_kp1, t("分析类目数", "Categories analyzed"),     f"{len(main_cats)}")
+_kpi(_kp2, t("ASIN 数(去重)", "ASINs (unique)"),  f"{_n_asin:,}")
+_kpi(_kp3, t("品牌数(去重)", "Brands (unique)"),   f"{_n_brand:,}")
+_kpi(_kp4, t("数据时间范围", "Date range"),
      f"{_date_min} ~ {_date_max}"
-     f"<div style='font-size:0.75rem; color:#9ca3af; margin-top:2px;'>({_n_days} 天)</div>",
+     f"<div style='font-size:0.75rem; color:#9ca3af; margin-top:2px;'>({_n_days} {t('天', 'days')})</div>",
      value_size="0.85rem", value_color="#36383b")
 
 # 市场历史价值指数（BS 榜最近 1 天 Top 100，固定口径）
@@ -136,7 +139,7 @@ else:
 # 1.1 类目概览
 # =======================================================================
 with st.container(border=True):
-    st.markdown("## 类目概览")
+    st.markdown(f"## {t('类目概览', 'Category Overview')}")
 
     if "cd_cats_inner" not in st.session_state:
         st.session_state.cd_cats_inner = list(main_cats)
@@ -151,16 +154,19 @@ with st.container(border=True):
 
     fc1, fc2 = st.columns([1, 4])
     with fc1:
-        st.markdown("<div class='filter-label'>🔍 类目选择</div>", unsafe_allow_html=True)
-        with st.popover(f"已选 {n_sel} / {n_total}", use_container_width=False):
+        st.markdown(f"<div class='filter-label'>🔍 {t('类目选择', 'Category Filter')}</div>",
+                    unsafe_allow_html=True)
+        with st.popover(f"{t('已选', 'Selected')} {n_sel} / {n_total}", use_container_width=False):
             bcol1, bcol2 = st.columns(2)
-            bcol1.button("✓ 全选", key="cd_btn_all", on_click=_cd_select_all, use_container_width=True)
-            bcol2.button("✗ 全不选", key="cd_btn_none", on_click=_cd_clear_all, use_container_width=True)
-            st.multiselect("勾选类目", options=main_cats,
+            bcol1.button(t("✓ 全选", "✓ Select All"), key="cd_btn_all",
+                         on_click=_cd_select_all, use_container_width=True)
+            bcol2.button(t("✗ 全不选", "✗ Clear"), key="cd_btn_none",
+                         on_click=_cd_clear_all, use_container_width=True)
+            st.multiselect(t("勾选类目", "Select categories"), options=main_cats,
                            key="cd_cats_inner", label_visibility="collapsed")
     with fc2:
         st.markdown("<div class='filter-label' style='visibility:hidden;'>·</div>", unsafe_allow_html=True)
-        cd_list = list_radio("榜单", key="cd_list", default="all")
+        cd_list = list_radio(t("榜单", "List"), key="cd_list", default="all")
     cd_cats = st.session_state.cd_cats_inner or list(main_cats)
 
     asin_v = filter_by_list(asin, cd_list)
@@ -168,7 +174,7 @@ with st.container(border=True):
     summary_v = summary[summary["category"].isin(cd_cats)]
     suffix = list_suffix(cd_list)
 
-    chart_title(f"● 类目汇总{suffix}")
+    chart_title(f"● {t('类目汇总', 'Category Summary')}{suffix}")
 
     agg_view = (
         asin_v.groupby("category")
@@ -203,61 +209,86 @@ with st.container(border=True):
     ordered_cols = [c for c in ordered_cols if c in agg_view.columns]
     display = agg_view[ordered_cols].copy()
 
+    # 列名既是展示标签也是下游 column_config / sort_col / .columns 判断的键，
+    # 用变量统一引用，保证 t() 在同一 rerun 内取值一致（中/英都不会错配键）
+    COL_CATEGORY      = t("类目", "Category")
+    COL_RECORDS       = t("记录数", "Records")
+    COL_DAYS          = t("样本天数", "Sample days")
+    COL_UNIQUE_ASIN   = t("唯一ASIN", "Unique ASINs")
+    COL_BRAND         = t("品牌数", "Brands")
+    COL_SUBCAT        = t("子类数", "Subcategories")
+    COL_MONTHLY_GMV   = t("预估月销售额($M/月)", "Est. Monthly GMV ($M/mo)")
+    COL_MARKET_HEAT   = t("市场历史价值指数", "Market Heritage Value Index")
+    COL_PRICE_MEDIAN  = t("价格中位", "Median price")
+    COL_REVIEW_MEDIAN = t("评论中位", "Median reviews")
+    COL_RATE_MEAN     = t("评分均值", "Mean rating")
+    COL_HAS_VIDEO     = t("有视频%", "Video %")
+
     rename_map = {
-        "category":           "类目",
-        "records":            "记录数",
-        "days":               "样本天数",
-        "unique_asin":        "唯一ASIN",
-        "unique_brand":       "品牌数",
-        "n_subcategories":    "子类数",
-        "est_monthly_gmv_M":  "预估月销售额($M/月)",
-        "market_heat":        "市场历史价值指数",
-        "price_median":       "价格中位",
-        "review_median":      "评论中位",
-        "rate_mean":          "评分均值",
-        "has_video_pct":      "有视频%",
+        "category":           COL_CATEGORY,
+        "records":            COL_RECORDS,
+        "days":               COL_DAYS,
+        "unique_asin":        COL_UNIQUE_ASIN,
+        "unique_brand":       COL_BRAND,
+        "n_subcategories":    COL_SUBCAT,
+        "est_monthly_gmv_M":  COL_MONTHLY_GMV,
+        "market_heat":        COL_MARKET_HEAT,
+        "price_median":       COL_PRICE_MEDIAN,
+        "review_median":      COL_REVIEW_MEDIAN,
+        "rate_mean":          COL_RATE_MEAN,
+        "has_video_pct":      COL_HAS_VIDEO,
     }
     display = display.rename(columns=rename_map)
-    sort_col = "市场历史价值指数" if "市场历史价值指数" in display.columns else "唯一ASIN"
+    sort_col = COL_MARKET_HEAT if COL_MARKET_HEAT in display.columns else COL_UNIQUE_ASIN
     display = display.sort_values(sort_col, ascending=False, na_position="last")
 
     column_config = {
-        "类目":     st.column_config.TextColumn(width="medium"),
-        "记录数":   st.column_config.NumberColumn(format="%d"),
-        "样本天数": st.column_config.NumberColumn(format="%d"),
-        "唯一ASIN": st.column_config.NumberColumn(format="%d"),
-        "品牌数":   st.column_config.NumberColumn(format="%d"),
-        "子类数":   st.column_config.NumberColumn(format="%d"),
+        COL_CATEGORY:    st.column_config.TextColumn(width="medium", pinned=True),
+        COL_RECORDS:     st.column_config.NumberColumn(format="%d"),
+        COL_DAYS:        st.column_config.NumberColumn(format="%d"),
+        COL_UNIQUE_ASIN: st.column_config.NumberColumn(format="%d"),
+        COL_BRAND:       st.column_config.NumberColumn(format="%d"),
+        COL_SUBCAT:      st.column_config.NumberColumn(format="%d"),
     }
-    if "预估月销售额($M/月)" in display.columns:
-        m = display["预估月销售额($M/月)"].max()
-        column_config["预估月销售额($M/月)"] = st.column_config.ProgressColumn(
-            help="评论增量法估算的月化销售额（USD/月）— Σ_ASIN (review_delta ÷ 1.5% × 均价) × 30/天数。仅供类目间相对比较。",
+    if COL_MONTHLY_GMV in display.columns:
+        m = display[COL_MONTHLY_GMV].max()
+        column_config[COL_MONTHLY_GMV] = st.column_config.ProgressColumn(
+            help=t(
+                "评论增量法估算的月化销售额（USD/月）— Σ_ASIN (review_delta ÷ 1.5% × 均价) × 30/天数。仅供类目间相对比较。",
+                "Estimated monthly GMV (USD/mo) via the review-delta method — Σ_ASIN (review_delta ÷ 1.5% × "
+                "avg price) × 30/days. For relative cross-category comparison only.",
+            ),
             format="$%.1fM", min_value=0, max_value=float(m) if m else 1,
         )
-    if "市场历史价值指数" in display.columns:
-        m = display["市场历史价值指数"].max()
-        column_config["市场历史价值指数"] = st.column_config.ProgressColumn(
-            help="历史评论积累 × 价格的对数加权指数（无量纲）— Σ_top100_latest (log1p(review_count) × price_low)。"
-                 "log1p 压平评论长尾；偏老品。与月销售额互补：双高=头部大盘 / 月销高+热度低=新兴上升。",
+    if COL_MARKET_HEAT in display.columns:
+        m = display[COL_MARKET_HEAT].max()
+        column_config[COL_MARKET_HEAT] = st.column_config.ProgressColumn(
+            help=t(
+                "历史评论积累 × 价格的对数加权指数（无量纲）— Σ_top100_latest (log1p(review_count) × price_low)。"
+                "log1p 压平评论长尾；偏老品。与月销售额互补：双高=头部大盘 / 月销高+热度低=新兴上升。",
+                "Log-weighted index of historical review accumulation × price (dimensionless) — "
+                "Σ_top100_latest (log1p(review_count) × price_low). log1p flattens the review long tail; "
+                "legacy-biased. Complements monthly GMV: both high = Established-Heavy / high GMV + low "
+                "heritage = Emerging.",
+            ),
             format="%d", min_value=0, max_value=float(m) if m else 1,
         )
-    if "价格中位" in display.columns:
-        m = display["价格中位"].max()
-        column_config["价格中位"] = st.column_config.ProgressColumn(
+    if COL_PRICE_MEDIAN in display.columns:
+        m = display[COL_PRICE_MEDIAN].max()
+        column_config[COL_PRICE_MEDIAN] = st.column_config.ProgressColumn(
             format="$%.2f", min_value=0, max_value=float(m) if m else 1,
         )
-    if "评论中位" in display.columns:
-        m = display["评论中位"].max()
-        column_config["评论中位"] = st.column_config.ProgressColumn(
+    if COL_REVIEW_MEDIAN in display.columns:
+        m = display[COL_REVIEW_MEDIAN].max()
+        column_config[COL_REVIEW_MEDIAN] = st.column_config.ProgressColumn(
             format="%d", min_value=0, max_value=float(m) if m else 1,
         )
-    if "评分均值" in display.columns:
-        column_config["评分均值"] = st.column_config.ProgressColumn(
+    if COL_RATE_MEAN in display.columns:
+        column_config[COL_RATE_MEAN] = st.column_config.ProgressColumn(
             format="%.2f", min_value=0, max_value=5,
         )
-    if "有视频%" in display.columns:
-        column_config["有视频%"] = st.column_config.ProgressColumn(
+    if COL_HAS_VIDEO in display.columns:
+        column_config[COL_HAS_VIDEO] = st.column_config.ProgressColumn(
             format="%.1f%%", min_value=0, max_value=100,
         )
 
@@ -265,8 +296,12 @@ with st.container(border=True):
                  column_config=column_config, height=260)
     st.markdown(
         "<div style='font-size: 0.70rem; color: #6b7280; line-height: 1.65; margin-top: 4px;'>"
-        "注：预估月销售额($M/月)、市场历史价值指数均仅基于<b>BS榜</b>口径（不随榜单选择器变化）"
-        "</div>",
+        + t(
+            "注：预估月销售额($M/月)、市场历史价值指数均仅基于<b>BS榜</b>口径（不随榜单选择器变化）",
+            "Note: Est. Monthly GMV ($M/mo) and Market Heritage Value Index are both based on the "
+            "<b>BS list</b> only (do not change with the list selector).",
+        )
+        + "</div>",
         unsafe_allow_html=True,
     )
 
@@ -274,19 +309,19 @@ with st.container(border=True):
 # =======================================================================
 # 1.2 类目画像
 # =======================================================================
-st.markdown("## 类目画像")
+st.markdown(f"## {t('类目画像', 'Category Profile')}")
 
 # ----- 基础分布 -----
 with st.container(border=True):
-    st.markdown("**● 基础分布**")
+    st.markdown(f"**● {t('基础分布', 'Distributions')}**")
 
-    bd_list = list_radio("榜单", key="bd_list", default="best_seller")
+    bd_list = list_radio(t("榜单", "List"), key="bd_list", default="best_seller")
     suffix_bd = list_suffix(bd_list)
     asin_bd = filter_by_list(asin, bd_list)
     asin_bd = asin_bd.dropna(subset=["price_low", "review_count"], how="all")
 
     if asin_bd.empty:
-        st.warning("当前榜单无数据")
+        st.warning(t("当前榜单无数据", "No data for the current list"))
     else:
         bd_v = asin_bd.copy()
         bd_v["price_clip"] = bd_v.groupby("category")["price_low"].transform(
@@ -294,36 +329,37 @@ with st.container(border=True):
         bd_v["review_clip"] = bd_v.groupby("category")["review_count"].transform(
             lambda s: s.clip(upper=s.quantile(0.95)))
 
-        chart_title(f"1. 价格分布{suffix_bd}")
+        chart_title(f"1. {t('价格分布', 'Price Distribution')}{suffix_bd}")
         fig = px.box(bd_v.dropna(subset=["price_clip"]),
                      x="category", y="price_clip", height=380,
                      points=False, color="category")
         fig.update_traces(hovertemplate="%{x}<br>%{y:.2f} USD<extra></extra>")
         fig.update_layout(xaxis_tickangle=-30, xaxis_title=None,
-                          yaxis_title="价格 (USD)", showlegend=False,
+                          yaxis_title=t("价格 (USD)", "Price (USD)"), showlegend=False,
                           yaxis=dict(tickformat=".2f"),
                           margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, width="stretch")
 
         chart_spacer()
 
-        chart_title(f"2. 评论数分布{suffix_bd}")
+        chart_title(f"2. {t('评论数分布', 'Review Count Distribution')}{suffix_bd}")
         fig = px.box(bd_v.dropna(subset=["review_clip"]),
                      x="category", y="review_clip", height=380,
                      points=False, color="category")
         fig.update_traces(hovertemplate="%{x}<br>%{y:.0f}<extra></extra>")
         fig.update_layout(xaxis_tickangle=-30, xaxis_title=None,
-                          yaxis_title="评论数", showlegend=False,
+                          yaxis_title=t("评论数", "Review count"), showlegend=False,
                           margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, width="stretch")
 
 
 # ----- 交叉分析 -----
 with st.container(border=True):
-    st.markdown("**● 交叉分析**")
-    st.caption("注：基于 BS 榜口径（与页面榜单选择器无关）")
+    st.markdown(f"**● {t('交叉分析', 'Cross Analysis')}**")
+    st.caption(t("注：基于 BS 榜口径（与页面榜单选择器无关）",
+                 "Note: based on the BS list only (independent of the page list selector)"))
 
-    chart_title("类目象限图（固定BS口径）")
+    chart_title(t("类目象限图（固定BS口径）", "Category Quadrant Chart (fixed BS basis)"))
     quad = summary[["category", "est_monthly_gmv", "avg_price_median"]].copy()
     quad["monthly_M"] = (quad["est_monthly_gmv"] / 1e6).round(2)
     quad["heat"] = quad["category"].map(market_heat)
@@ -339,9 +375,9 @@ with st.container(border=True):
                         "avg_price_median": ":.2f",
                         "category": False},
             height=480,
-            labels={"monthly_M": "预估月销售额 ($M/月)",
-                    "heat": "市场历史价值指数",
-                    "avg_price_median": "价格中位 (USD)"},
+            labels={"monthly_M": t("预估月销售额 ($M/月)", "Est. Monthly GMV ($M/mo)"),
+                    "heat": t("市场历史价值指数", "Market Heritage Value Index"),
+                    "avg_price_median": t("价格中位 (USD)", "Median price (USD)")},
         )
         fig.update_traces(
             marker=dict(size=14, color="#a8cfee",
@@ -360,8 +396,8 @@ with st.container(border=True):
         y_range = [max(0, y_lo - (y_hi - y_lo) * 0.12), y_hi + (y_hi - y_lo) * 0.18]
         # 4 象限标签
         for x_anchor, x_pos, label, color in [
-            (0.99, "right", "<b>头部大盘</b>",   "#c0392b"),
-            (0.01, "left",  "<b>稳态成熟</b>",   "#2980b9"),
+            (0.99, "right", f"<b>{t('头部大盘', 'Established-Heavy')}</b>",   "#c0392b"),
+            (0.01, "left",  f"<b>{t('稳态成熟', 'Mature-Stable')}</b>",   "#2980b9"),
         ]:
             fig.add_annotation(xref="paper", yref="paper", x=x_anchor, y=1.0, yshift=14,
                                text=label, showarrow=False,
@@ -369,8 +405,8 @@ with st.container(border=True):
                                xanchor=x_pos, yanchor="bottom",
                                bgcolor="rgba(0,0,0,0)", borderpad=3)
         for x_anchor, x_pos, label, color in [
-            (0.99, "right", "<b>新兴上升 ★</b>", "#27ae60"),
-            (0.01, "left",  "<b>冷门小盘</b>",   "#7f8c8d"),
+            (0.99, "right", f"<b>{t('新兴上升 ★', 'Emerging ★')}</b>", "#27ae60"),
+            (0.01, "left",  f"<b>{t('冷门小盘', 'Large-but-Cold')}</b>",   "#7f8c8d"),
         ]:
             fig.add_annotation(xref="paper", yref="paper", x=x_anchor, y=0.0, yshift=-14,
                                text=label, showarrow=False,

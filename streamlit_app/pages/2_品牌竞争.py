@@ -6,6 +6,7 @@
 #   - 数据源从 v1/data/amazon.db 改为 demo/data/*.csv（in-memory sqlite，connect_demo）
 #   - 类目缩减为 5（Category A ~ E）；品牌/ASIN 已匿名化，价格/评论数 ±5% 扰动
 #   - 分析逻辑（集中度/经营形态/二维诊断/Treemap）与生产版完全一致
+#   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
 
 import sys
 from pathlib import Path
@@ -18,7 +19,8 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "streamlit_app"))
-from _styles import inject_global_style, app_header, page_title, chart_title, conclusion, chart_spacer
+from _styles import page_title, chart_title, conclusion, chart_spacer
+from _i18n import t
 from _demo_data import connect_demo
 
 
@@ -31,6 +33,48 @@ TAG_COLOR = {
     "Excluded":    "#cbd5e1",   # 浅灰（v2.6 黑名单类目，如 Amazon Devices）
     "Subcategory": "#bdc3c7",
 }
+
+# 9 标签竞争结构「中文键 → 双语显示文案」（仅用于显示，内部键侧保持中文）
+COMPETITION_TAG_DISPLAY = {
+    "强垄断":       t("强垄断", "Strong Monopoly"),
+    "强势矩阵卡位": t("强势矩阵卡位", "Strong Matrix Lock-in"),
+    "强势爆款主导": t("强势爆款主导", "Strong Hit-Driven"),
+    "竞争均衡":     t("竞争均衡", "Balanced Competition"),
+    "中度矩阵卡位": t("中度矩阵卡位", "Moderate Matrix Lock-in"),
+    "爆款主导":     t("爆款主导", "Hit-Driven"),
+    "竞争分散":     t("竞争分散", "Fragmented Competition"),
+    "偏矩阵竞争":   t("偏矩阵竞争", "Matrix-Leaning"),
+    "偏爆款竞争":   t("偏爆款竞争", "Hit-Leaning"),
+}
+
+# 9 标签运营形态「中文键 → 双语显示文案」（仅用于显示，内部键侧保持中文）
+MGMT_TAG_DISPLAY = {
+    "头部全能型": t("头部全能型", "Leader All-Rounder"),
+    "头部矩阵型": t("头部矩阵型", "Leader Matrix"),
+    "头部精品型": t("头部精品型", "Leader Boutique"),
+    "中坚均衡型": t("中坚均衡型", "Mid-Tier Balanced"),
+    "中坚矩阵型": t("中坚矩阵型", "Mid-Tier Matrix"),
+    "中坚精品型": t("中坚精品型", "Mid-Tier Boutique"),
+    "长尾轻量型": t("长尾轻量型", "Long-Tail Light"),
+    "长尾铺货型": t("长尾铺货型", "Long-Tail Volume"),
+    "长尾爆品型": t("长尾爆品型", "Long-Tail Hit"),
+}
+
+# 留存后缀「中文键 → 双语显示文案」
+RETENTION_SUFFIX_DISPLAY = {
+    " 🎯稳定":   t(" 🎯稳定", " 🎯 Stable"),
+    " 🔄高流动": t(" 🔄高流动", " 🔄 High Churn"),
+}
+
+
+def _display_mgmt_tag(tag_full):
+    """运营形态完整标签（含留存后缀）→ 双语显示，内部键不变。"""
+    for zh_suffix, disp_suffix in RETENTION_SUFFIX_DISPLAY.items():
+        if tag_full.endswith(zh_suffix):
+            base = tag_full[: -len(zh_suffix)]
+            return MGMT_TAG_DISPLAY.get(base, base) + disp_suffix
+    return MGMT_TAG_DISPLAY.get(tag_full, tag_full)
+
 
 # -----------------------------------------------------------------------
 # 数据加载
@@ -107,17 +151,15 @@ def compute_cat_metrics(brand_weight_df, weight_col):
 # -----------------------------------------------------------------------
 # 页面
 # -----------------------------------------------------------------------
-st.set_page_config(page_title="品牌竞争", layout="wide", initial_sidebar_state="collapsed")
-inject_global_style()
-app_header()
-page_title("品牌竞争")
+page_title(t("品牌竞争", "Brand Competition"))
 
 # Demo banner
 st.markdown(
     "<div style='background:#fff7ed; border-left:4px solid #f59e0b; "
     "padding:8px 14px; margin: 4px 0 10px 0; border-radius:4px; font-size:0.85rem; color:#7c2d12;'>"
-    "🎭 <b>Demo Mode</b> — 节选 5 类目展示，品牌名/ASIN 已匿名化，价格/评论数 ±5% 扰动。"
-    "</div>",
+    + t("🎭 <b>Demo Mode</b> — 节选 5 类目展示，品牌名/ASIN 已匿名化，价格/评论数 ±5% 扰动。",
+        "🎭 <b>Demo Mode</b> — Showing 5 sample categories; brand names/ASINs anonymized, prices/review counts perturbed ±5%.")
+    + "</div>",
     unsafe_allow_html=True,
 )
 
@@ -132,7 +174,7 @@ summary_main = summary[summary["is_subcategory"] != 1].copy()
 N_DAYS = filt_asin["date"].nunique() if not filt_asin.empty else 0
 WIN_BADGE = f"BS · {N_DAYS}d 窗口"
 
-st.caption(f"注：基于 **BS 榜** · 大类目 ·")
+st.caption(t("注：基于 **BS 榜** · 大类目 ·", "Note: Based on **BS ranking** · top-level categories ·"))
 
 # 「类目-品牌-权重」基础表（含两种权重列）
 bs_clean = filt_asin.dropna(subset=["brand"]).copy()
@@ -162,9 +204,9 @@ cat_metrics_sales = compute_cat_metrics(brand_weight, "sales_heat").merge(
 # 3 按钮切换
 # -----------------------------------------------------------------------
 S2_VIEWS = {
-    "track_panorama":   "赛道全景",
-    "price_structure":  "价格结构",
-    "combo":            "组合分析",
+    "track_panorama":   t("赛道全景", "Track Panorama"),
+    "price_structure":  t("价格结构", "Price Structure"),
+    "combo":            t("组合分析", "Combined"),
 }
 if "s2_view" not in st.session_state:
     st.session_state.s2_view = "track_panorama"
@@ -193,7 +235,7 @@ if view == "track_panorama":
 
     # --- A.1 竞争结构热力矩阵（双口径 + 头部卡位难度 + 一致性 + 方向差异 + 竞争结构） ---
     with st.container(border=True):
-        chart_title("● 竞争结构简表")
+        chart_title(t("● 竞争结构简表", "● Competitive Structure Table"))
 
         # 展示 3 个指标（CR3 + HHI + 基尼），算法仅用 HHI + 基尼
         cols_for_display = ["cr3", "hhi", "gini"]
@@ -201,7 +243,7 @@ if view == "track_panorama":
         label_map = {
             "cr3":  "CR3",
             "hhi":  "HHI",
-            "gini": "基尼",
+            "gini": t("基尼", "Gini"),
         }
 
         def _normalize(df, cols):
@@ -217,11 +259,11 @@ if view == "track_panorama":
 
         def _barrier_level(s):
             # BS 口径下"挤进 Top 100 的相对难度"，低端用"偏松/较松"避免"极易"误导
-            if s >= 0.8:  return (4, "极难", "🔴")
-            if s >= 0.6:  return (3, "难",   "🟠")
-            if s >= 0.4:  return (2, "中等", "🟡")
-            if s >= 0.2:  return (1, "偏松", "🟡")
-            return (0, "较松", "🟢")
+            if s >= 0.8:  return (4, t("极难", "Very Hard"), "🔴")
+            if s >= 0.6:  return (3, t("难",   "Hard"),      "🟠")
+            if s >= 0.4:  return (2, t("中等", "Moderate"),  "🟡")
+            if s >= 0.2:  return (1, t("偏松", "Somewhat Open"), "🟡")
+            return (0, t("较松", "Open"), "🟢")
 
         df_c = cat_metrics_count[["category"] + cols_for_display].set_index("category")
         nc = _normalize(df_c, cols_for_display)
@@ -311,11 +353,11 @@ if view == "track_panorama":
         #   0-3 数量段 (CR3/HHI/基尼/数量卡位难度) | 4-7 销售段 | 8 一致性 | 9 综合卡位难度 | 10-11 竞争结构(占2列宽)
         all_x = (
             [label_map[c] for c in cols_for_display]
-            + ["数量卡位难度"]
+            + [t("数量卡位难度", "Volume Barrier")]
             + [label_map[c] + " " for c in cols_for_display]
-            + ["销售卡位难度 "]
-            + ["一致性"]
-            + ["综合卡位难度"]
+            + [t("销售卡位难度 ", "Sales Barrier ")]
+            + [t("一致性", "Consistency")]
+            + [t("综合卡位难度", "Overall Barrier")]
             + [" ", "  "]
         )
 
@@ -362,17 +404,17 @@ if view == "track_panorama":
         # 顶部分组标题
         fig.add_annotation(
             x=1.5, y=1.10, yref="paper", xref="x",
-            text="<b>📊 数量口径 (按 ASIN 数)</b>", showarrow=False,
+            text=t("<b>📊 数量口径 (按 ASIN 数)</b>", "<b>📊 Volume Basis (by ASIN count)</b>"), showarrow=False,
             font=dict(size=12, color="#1e3a5f"),
         )
         fig.add_annotation(
             x=5.5, y=1.10, yref="paper", xref="x",
-            text="<b>💰 销售口径 (按 review×price)</b>", showarrow=False,
+            text=t("<b>💰 销售口径 (按 review×price)</b>", "<b>💰 Sales Basis (by review×price)</b>"), showarrow=False,
             font=dict(size=12, color="#1e3a5f"),
         )
         fig.add_annotation(
             x=10.5, y=1.10, yref="paper", xref="x",
-            text="<b>🔍 二维诊断</b>", showarrow=False,
+            text=t("<b>🔍 二维诊断</b>", "<b>🔍 2-D Diagnosis</b>"), showarrow=False,
             font=dict(size=12, color="#1e3a5f"),
         )
 
@@ -395,7 +437,7 @@ if view == "track_panorama":
             fig.add_annotation(
                 x=10.5, y=cat,
                 xref="x", yref="y",
-                text=diag_labels[i], showarrow=False,
+                text=COMPETITION_TAG_DISPLAY.get(diag_labels[i], diag_labels[i]), showarrow=False,
                 font=dict(size=10, color=text_color),
                 xanchor="center", yanchor="middle",
             )
@@ -404,12 +446,12 @@ if view == "track_panorama":
         tick_positions = list(range(10)) + [10.5]
         tick_labels = (
             [label_map[c] for c in cols_for_display]
-            + ["数量卡位难度"]
+            + [t("数量卡位难度", "Volume Barrier")]
             + [label_map[c] for c in cols_for_display]
-            + ["销售卡位难度"]
-            + ["一致性"]
-            + ["综合卡位难度"]
-            + ["竞争结构"]
+            + [t("销售卡位难度", "Sales Barrier")]
+            + [t("一致性", "Consistency")]
+            + [t("综合卡位难度", "Overall Barrier")]
+            + [t("竞争结构", "Competition Type")]
         )
 
         fig.update_layout(
@@ -430,7 +472,7 @@ if view == "track_panorama":
 
     # --- A.2 二维象限：方向差异 × 综合卡位难度（9 区域） ---
     with st.container(border=True):
-        chart_title("● 竞争结构图谱")
+        chart_title(t("● 竞争结构图谱", "● Competitive Structure Map"))
 
         # 9 标签色板：3 列（一致/数量偏/销售偏）× 3 行（高/中/低 壁垒）
         # 一致系：红/灰/绿；数量系：深橙/橙/浅橙；销售系：深紫/紫/浅紫
@@ -485,25 +527,25 @@ if view == "track_panorama":
         # 9 区域标签（贴各区域左下角，避开散点 text 默认位置「散点正上方」）
         region_labels = [
             # 高壁垒行
-            dict(text="强势爆款主导", x=-x_max + 0.02, y=0.84, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["强势爆款主导"], x=-x_max + 0.02, y=0.84, anchor="left",
                  color=TAG_COLOR_MAP["强势爆款主导"]),
-            dict(text="强垄断",       x=-0.08,          y=0.84, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["强垄断"],       x=-0.08,          y=0.84, anchor="left",
                  color=TAG_COLOR_MAP["强垄断"]),
-            dict(text="强势矩阵卡位", x=0.12,           y=0.84, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["强势矩阵卡位"], x=0.12,           y=0.84, anchor="left",
                  color=TAG_COLOR_MAP["强势矩阵卡位"]),
             # 中壁垒行
-            dict(text="爆款主导",     x=-x_max + 0.02, y=0.54, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["爆款主导"],     x=-x_max + 0.02, y=0.54, anchor="left",
                  color=TAG_COLOR_MAP["爆款主导"]),
-            dict(text="竞争均衡",     x=-0.08,          y=0.54, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["竞争均衡"],     x=-0.08,          y=0.54, anchor="left",
                  color=TAG_COLOR_MAP["竞争均衡"]),
-            dict(text="中度矩阵卡位", x=0.12,           y=0.54, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["中度矩阵卡位"], x=0.12,           y=0.54, anchor="left",
                  color=TAG_COLOR_MAP["中度矩阵卡位"]),
             # 低壁垒行
-            dict(text="偏爆款竞争",   x=-x_max + 0.02, y=0.04, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["偏爆款竞争"],   x=-x_max + 0.02, y=0.04, anchor="left",
                  color=TAG_COLOR_MAP["偏爆款竞争"]),
-            dict(text="竞争分散",     x=-0.08,          y=0.04, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["竞争分散"],     x=-0.08,          y=0.04, anchor="left",
                  color=TAG_COLOR_MAP["竞争分散"]),
-            dict(text="偏矩阵竞争",   x=0.12,           y=0.04, anchor="left",
+            dict(text=COMPETITION_TAG_DISPLAY["偏矩阵竞争"],   x=0.12,           y=0.04, anchor="left",
                  color=TAG_COLOR_MAP["偏矩阵竞争"]),
         ]
         for rl in region_labels:
@@ -527,18 +569,22 @@ if view == "track_panorama":
                 marker=dict(size=14, color=color, line=dict(width=1.5, color="white")),
                 text=sub["category"], textposition=tpos,
                 textfont=dict(size=9, color="#1a2940"),
-                name=tag,
+                name=COMPETITION_TAG_DISPLAY.get(tag, tag),
                 cliponaxis=False,
-                hovertemplate="<b>%{text}</b><br>方向差异 %{x:+.2f}"
-                              "<br>综合卡位难度 %{y:.2f}<extra></extra>",
+                hovertemplate=t("<b>%{text}</b><br>方向差异 %{x:+.2f}"
+                                "<br>综合卡位难度 %{y:.2f}<extra></extra>",
+                                "<b>%{text}</b><br>Direction Gap %{x:+.2f}"
+                                "<br>Overall Barrier %{y:.2f}<extra></extra>"),
             ))
 
         fig_q.update_layout(
             height=640,
             margin=dict(l=10, r=10, t=10, b=10),
-            xaxis=dict(title="方向差异（数量 − 销售 barrier_score）",
+            xaxis=dict(title=t("方向差异（数量 − 销售 barrier_score）",
+                               "Direction Gap (Volume − Sales barrier_score)"),
                        range=[-x_max, x_max]),
-            yaxis=dict(title="综合卡位难度（数量 + 销售 barrier_score 平均）",
+            yaxis=dict(title=t("综合卡位难度（数量 + 销售 barrier_score 平均）",
+                               "Overall Barrier (avg of Volume + Sales barrier_score)"),
                        range=[0, 1]),
             showlegend=False,
         )
@@ -548,7 +594,7 @@ if view == "track_panorama":
 
     # --- A.3 经营形态简表 ---
     with st.container(border=True):
-        chart_title("● 运营形态简表")
+        chart_title(t("● 运营形态简表", "● Operating Profile Table"))
 
         # 类目级聚合
         cat_heat = (brand_weight.groupby("category")["sales_heat"].sum()
@@ -575,11 +621,11 @@ if view == "track_panorama":
 
         # 密度分档（5 档，BS 口径下"低端"用偏低/较低 软化）
         def _density_level(s_norm):
-            if s_norm >= 0.8:  return (4, "极高", "🔴")
-            if s_norm >= 0.6:  return (3, "高",   "🟠")
-            if s_norm >= 0.4:  return (2, "中",   "🟡")
-            if s_norm >= 0.2:  return (1, "偏低", "🟡")
-            return (0, "较低", "🟢")
+            if s_norm >= 0.8:  return (4, t("极高", "Very High"), "🔴")
+            if s_norm >= 0.6:  return (3, t("高",   "High"),      "🟠")
+            if s_norm >= 0.4:  return (2, t("中",   "Medium"),    "🟡")
+            if s_norm >= 0.2:  return (1, t("偏低", "Somewhat Low"), "🟡")
+            return (0, t("较低", "Low"), "🟢")
 
         cm["d1_level"] = cm["d1_norm"].apply(_density_level)
         cm["d2_level"] = cm["d2_norm"].apply(_density_level)
@@ -742,16 +788,17 @@ if view == "track_panorama":
             fig.add_annotation(
                 x=10.5, y=cat,
                 xref="x", yref="y",
-                text=cm_ord_d[i], showarrow=False,
+                text=_display_mgmt_tag(cm_ord_d[i]), showarrow=False,
                 font=dict(size=10, color=text_color),
                 xanchor="center", yanchor="middle",
             )
         # tick：8 个原始列 + 一致性(x=8) + 综合经营密度(x=9) + 经营形态(x=10.5 双列中心)
         tick_positions = list(range(10)) + [10.5]
-        tick_labels = ["ASIN 数量", "品牌数量", "销售热度(M)",
-                       "ASIN/品牌", "数量密度",
-                       "销售/品牌(M)", "销售密度",
-                       "品牌留存率", "一致性", "品牌综合密度", "运营形态"]
+        tick_labels = [t("ASIN 数量", "ASIN Count"), t("品牌数量", "Brand Count"), t("销售热度(M)", "Sales Heat (M)"),
+                       t("ASIN/品牌", "ASIN/Brand"), t("数量密度", "Volume Density"),
+                       t("销售/品牌(M)", "Sales/Brand (M)"), t("销售密度", "Sales Density"),
+                       t("品牌留存率", "Brand Retention"), t("一致性", "Consistency"),
+                       t("品牌综合密度", "Overall Brand Density"), t("运营形态", "Operating Profile")]
         fig.update_layout(
             height=max(480, 32 * len(order)),
             margin=dict(l=10, r=10, t=10, b=10),
@@ -768,8 +815,8 @@ if view == "track_panorama":
 
     # --- A.4 经营形态二维象限：方向差异 × 综合经营密度（9 区域 + size=留存） ---
     with st.container(border=True):
-        chart_title("● 运营形态图谱")
-        st.caption("气泡大小 = 品牌留存率")
+        chart_title(t("● 运营形态图谱", "● Operating Profile Map"))
+        st.caption(t("气泡大小 = 品牌留存率", "Bubble size = brand retention"))
 
         # 9 标签色板（与经营形态 9 标签对应；色系跟 A.2 一致）
         MGMT_COLOR_MAP = {
@@ -796,6 +843,7 @@ if view == "track_panorama":
             "tag_full": cm_ord["d_cons"].tolist(),
         })
         mgmt_scatter["tag"] = mgmt_scatter["tag_full"].apply(_strip_suffix)
+        mgmt_scatter["tag_full_disp"] = mgmt_scatter["tag_full"].apply(_display_mgmt_tag)
 
         x_max_m = max(0.5, max(abs(d) for d in mgmt_scatter["diff"]) * 1.15) if not mgmt_scatter.empty else 0.5
 
@@ -826,15 +874,15 @@ if view == "track_panorama":
 
         # 9 区域标签（贴各区域左下）
         region_labels_m = [
-            dict(text="头部精品型", x=-x_max_m + 0.02, y=0.84, color=MGMT_COLOR_MAP["头部精品型"]),
-            dict(text="头部全能型", x=-0.08,            y=0.84, color=MGMT_COLOR_MAP["头部全能型"]),
-            dict(text="头部矩阵型", x=0.12,             y=0.84, color=MGMT_COLOR_MAP["头部矩阵型"]),
-            dict(text="中坚精品型", x=-x_max_m + 0.02, y=0.54, color=MGMT_COLOR_MAP["中坚精品型"]),
-            dict(text="中坚均衡型", x=-0.08,            y=0.54, color=MGMT_COLOR_MAP["中坚均衡型"]),
-            dict(text="中坚矩阵型", x=0.12,             y=0.54, color=MGMT_COLOR_MAP["中坚矩阵型"]),
-            dict(text="长尾爆品型", x=-x_max_m + 0.02, y=0.04, color=MGMT_COLOR_MAP["长尾爆品型"]),
-            dict(text="长尾轻量型", x=-0.08,            y=0.04, color=MGMT_COLOR_MAP["长尾轻量型"]),
-            dict(text="长尾铺货型", x=0.12,             y=0.04, color=MGMT_COLOR_MAP["长尾铺货型"]),
+            dict(text=MGMT_TAG_DISPLAY["头部精品型"], x=-x_max_m + 0.02, y=0.84, color=MGMT_COLOR_MAP["头部精品型"]),
+            dict(text=MGMT_TAG_DISPLAY["头部全能型"], x=-0.08,            y=0.84, color=MGMT_COLOR_MAP["头部全能型"]),
+            dict(text=MGMT_TAG_DISPLAY["头部矩阵型"], x=0.12,             y=0.84, color=MGMT_COLOR_MAP["头部矩阵型"]),
+            dict(text=MGMT_TAG_DISPLAY["中坚精品型"], x=-x_max_m + 0.02, y=0.54, color=MGMT_COLOR_MAP["中坚精品型"]),
+            dict(text=MGMT_TAG_DISPLAY["中坚均衡型"], x=-0.08,            y=0.54, color=MGMT_COLOR_MAP["中坚均衡型"]),
+            dict(text=MGMT_TAG_DISPLAY["中坚矩阵型"], x=0.12,             y=0.54, color=MGMT_COLOR_MAP["中坚矩阵型"]),
+            dict(text=MGMT_TAG_DISPLAY["长尾爆品型"], x=-x_max_m + 0.02, y=0.04, color=MGMT_COLOR_MAP["长尾爆品型"]),
+            dict(text=MGMT_TAG_DISPLAY["长尾轻量型"], x=-0.08,            y=0.04, color=MGMT_COLOR_MAP["长尾轻量型"]),
+            dict(text=MGMT_TAG_DISPLAY["长尾铺货型"], x=0.12,             y=0.04, color=MGMT_COLOR_MAP["长尾铺货型"]),
         ]
         for rl in region_labels_m:
             fig_m.add_annotation(
@@ -860,21 +908,27 @@ if view == "track_panorama":
                             sizemode="diameter"),
                 text=sub["category"], textposition=tpos,
                 textfont=dict(size=9, color="#1a2940"),
-                name=tag,
+                name=MGMT_TAG_DISPLAY.get(tag, tag),
                 cliponaxis=False,
-                customdata=sub[["ret", "tag_full"]].values,
-                hovertemplate="<b>%{text}</b><br>方向差异 %{x:+.2f}"
-                              "<br>综合经营密度 %{y:.2f}"
-                              "<br>留存率 %{customdata[0]:.0%}"
-                              "<br>形态 %{customdata[1]}<extra></extra>",
+                customdata=sub[["ret", "tag_full_disp"]].values,
+                hovertemplate=t("<b>%{text}</b><br>方向差异 %{x:+.2f}"
+                                "<br>综合经营密度 %{y:.2f}"
+                                "<br>留存率 %{customdata[0]:.0%}"
+                                "<br>形态 %{customdata[1]}<extra></extra>",
+                                "<b>%{text}</b><br>Direction Gap %{x:+.2f}"
+                                "<br>Overall Density %{y:.2f}"
+                                "<br>Retention %{customdata[0]:.0%}"
+                                "<br>Profile %{customdata[1]}<extra></extra>"),
             ))
 
         fig_m.update_layout(
             height=760,
             margin=dict(l=10, r=10, t=20, b=10),
-            xaxis=dict(title="方向差异（数量 − 销售密度归一化）",
+            xaxis=dict(title=t("方向差异（数量 − 销售密度归一化）",
+                               "Direction Gap (Volume − Sales density, normalized)"),
                        range=[-x_max_m, x_max_m]),
-            yaxis=dict(title="综合经营密度（数量 + 销售密度归一化平均）",
+            yaxis=dict(title=t("综合经营密度（数量 + 销售密度归一化平均）",
+                               "Overall Density (avg of normalized Volume + Sales density)"),
                        range=[0, 1]),
             showlegend=False,
         )
@@ -884,16 +938,17 @@ if view == "track_panorama":
 
     # --- A.5 Treemap 单类目下钻 ---
     with st.container(border=True):
-        chart_title("Treemap：单类目内 Top15 品牌的 ASIN 占比（下钻）")
+        chart_title(t("Treemap：单类目内 Top15 品牌的 ASIN 占比（下钻）",
+                      "Treemap: ASIN share of Top 15 brands within a category (drill-down)"))
         cat_pick = st.selectbox(
-            "选择类目下钻",
+            t("选择类目下钻", "Select a category to drill down"),
             sorted(brand_weight["category"].unique()),
             index=0, key="tm_cat_panorama",
         )
         sub = (brand_weight[brand_weight["category"] == cat_pick]
                .sort_values("asin_count", ascending=False).head(15))
         if sub.empty:
-            st.warning("该类目无品牌数据")
+            st.warning(t("该类目无品牌数据", "No brand data for this category"))
         else:
             fig = px.treemap(
                 sub, path=["brand"], values="asin_count",
@@ -913,7 +968,8 @@ if view == "track_panorama":
 # =======================================================================
 elif view == "price_structure":
     with st.container(border=True):
-        chart_title("品牌价格带分布（每类目下品牌均价的箱线）")
+        chart_title(t("品牌价格带分布（每类目下品牌均价的箱线）",
+                      "Brand Price-Band Distribution (box plot of brand median prices per category)"))
 
         brand_price = (
             filt_asin.dropna(subset=["brand", "price_low"])
@@ -921,7 +977,7 @@ elif view == "price_structure":
               .reset_index(name="brand_med_price")
         )
         if brand_price.empty:
-            st.warning("无品牌价格数据")
+            st.warning(t("无品牌价格数据", "No brand price data"))
         else:
             sorted_data = brand_price.sort_values("category")
 
@@ -929,7 +985,7 @@ elif view == "price_structure":
                 sorted_data,
                 x="brand_med_price", y="category", orientation="h",
                 height=620, points="outliers", log_x=True,
-                labels={"brand_med_price": "品牌均价 (USD, 对数轴)", "category": ""},
+                labels={"brand_med_price": t("品牌均价 (USD, 对数轴)", "Brand median price (USD, log axis)"), "category": ""},
             )
             fig.update_traces(marker=dict(color="#3d6fa0"), line=dict(color="#1e3a5f"))
             # 完整次刻度：1, 2, 5, 10, 20, 50, 100, 200, 500, 1000
@@ -972,18 +1028,18 @@ elif view == "combo":
 
     # ===== 标签映射（与 A.1 / A.3 同源）=====
     def _barrier_emoji(s):
-        if s >= 0.8: return ("🔴", "极难")
-        if s >= 0.6: return ("🟠", "难")
-        if s >= 0.4: return ("🟡", "中等")
-        if s >= 0.2: return ("🟡", "偏松")
-        return ("🟢", "较松")
+        if s >= 0.8: return ("🔴", t("极难", "Very Hard"))
+        if s >= 0.6: return ("🟠", t("难", "Hard"))
+        if s >= 0.4: return ("🟡", t("中等", "Moderate"))
+        if s >= 0.2: return ("🟡", t("偏松", "Somewhat Open"))
+        return ("🟢", t("较松", "Open"))
 
     def _density_emoji(s):
-        if s >= 0.8: return ("🔴", "极高")
-        if s >= 0.6: return ("🟠", "高")
-        if s >= 0.4: return ("🟡", "中")
-        if s >= 0.2: return ("🟡", "偏低")
-        return ("🟢", "较低")
+        if s >= 0.8: return ("🔴", t("极高", "Very High"))
+        if s >= 0.6: return ("🟠", t("高", "High"))
+        if s >= 0.4: return ("🟡", t("中", "Medium"))
+        if s >= 0.2: return ("🟡", t("偏低", "Somewhat Low"))
+        return ("🟢", t("较低", "Low"))
 
     def _competition_tag(cs, ss):
         diff = cs - ss
@@ -1057,6 +1113,7 @@ elif view == "combo":
         avg_b = (cs + ss) / 2
         b_emo, b_lvl = _barrier_emoji(avg_b)
         comp_tag = _competition_tag(cs, ss)
+        comp_tag = COMPETITION_TAG_DISPLAY.get(comp_tag, comp_tag)
 
         if cat in cm_combo.index:
             d1 = cm_combo.loc[cat, "d1_norm"]
@@ -1068,7 +1125,7 @@ elif view == "combo":
         if pd.notna(d1) and pd.notna(d2):
             avg_d = (d1 + d2) / 2
             de_emo, de_lvl = _density_emoji(avg_d)
-            mgmt_tag = _management_tag(d1, d2, ret)
+            mgmt_tag = _display_mgmt_tag(_management_tag(d1, d2, ret))
             density_str = f"{de_emo}{de_lvl}({avg_d:.2f})"
         else:
             mgmt_tag = "—"
@@ -1084,15 +1141,15 @@ elif view == "combo":
             price_iqr_str = "—"
 
         rows.append({
-            "类目":         cat,
-            "综合卡位难度": f"{b_emo}{b_lvl}({avg_b:.2f})",
+            t("类目", "Category"):         cat,
+            t("综合卡位难度", "Overall Barrier"): f"{b_emo}{b_lvl}({avg_b:.2f})",
             "_avg_sort":    avg_b,
-            "竞争结构":     comp_tag,
-            "综合经营密度": density_str,
-            "经营形态":     mgmt_tag,
-            "价格中位":     price_med_str,
-            "价格 IQR":     price_iqr_str,
-            "留存率":       f"{ret:.0%}" if pd.notna(ret) else "—",
+            t("竞争结构", "Competition Type"):     comp_tag,
+            t("综合经营密度", "Overall Density"): density_str,
+            t("经营形态", "Operating Profile"):     mgmt_tag,
+            t("价格中位", "Median Price"):     price_med_str,
+            t("价格 IQR", "Price IQR"):     price_iqr_str,
+            t("留存率", "Retention"):       f"{ret:.0%}" if pd.notna(ret) else "—",
         })
 
     combo_df = (pd.DataFrame(rows)
@@ -1101,7 +1158,8 @@ elif view == "combo":
                 .reset_index(drop=True))
 
     with st.container(border=True):
-        chart_title(f"类目综合对照表（{len(combo_df)} 个类目，按综合卡位难度降序）")
+        chart_title(t(f"类目综合对照表（{len(combo_df)} 个类目，按综合卡位难度降序）",
+                      f"Category Master Comparison ({len(combo_df)} categories, sorted by overall barrier desc.)"))
         st.dataframe(
             combo_df,
             hide_index=True,

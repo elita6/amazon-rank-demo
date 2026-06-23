@@ -11,8 +11,11 @@
 #   - 2026-05-01 v4：修主标题被截断（block-container padding-top 加大 + line-height）；
 #                筛选器选中色覆盖红→蓝；下载按钮字号缩小到与表格一致；
 #                新增 view-toggle 三按钮风格（蓝底白字 active / 浅边框 inactive）
+#   - 2026-06-23：app_header 标题改中英双语（import _i18n.t）；配合 st.navigation 入口
 
 import streamlit as st
+
+from _i18n import t
 
 
 # H1 渐变三色（深→浅），H2 竖线用最深的那个色保证视觉延续
@@ -317,10 +320,11 @@ def inject_global_style():
 
 def app_header():
     """全局共享大标题（每页顶部都渲染）"""
+    title = t("Amazon 类目机会评分系统 · Demo", "Amazon Category Opportunity Scorer · Demo")
     st.markdown(
-        """
+        f"""
         <div class='app-header'>
-          Amazon 类目机会评分系统 · Demo
+          {title}
         </div>
         """,
         unsafe_allow_html=True,
