@@ -1,5 +1,5 @@
 # demo/streamlit_app/pages/2_行动指引.py
-# 更新日期：2026-05-12
+# 更新日期：2026-06-24
 # 用途：Demo 版行动指引页（5 类目 + 5 strategy 全覆盖）
 # 与生产版差异：
 #   - 数据源 db → demo csv（in-memory sqlite）
@@ -7,6 +7,10 @@
 #   - PLAYBOOK 公开 2 个 archetype + 11 个 locked 仅显示名字 + strategy badge
 # 主要改动：
 #   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
+#   - 2026-06-24：同步生产版 — strategy_tag 加 TAG_LABELS（优选/隐形机会/竞争拥挤/观察/不建议）、
+#                price band 加 BAND_LABELS（低价带/大众带/高端带/超高端带）显示映射；
+#                市场窗口信号 opening/closing/stable → 打开中/关闭中/稳定；Gap 列名中文化；
+#                13 业务类型框架的 strategy badge 用 TAG_LABELS 显示；内部数据值/逻辑键仍用英文
 
 import sys
 from pathlib import Path
@@ -45,7 +49,7 @@ PLAYBOOK = {
             t("市场开放但需求弱，谨慎进入", "Market is open but demand is weak — enter cautiously"),
             t("仅做低成本测试（<$2k 试水预算）", "Run low-cost tests only (under $2k pilot budget)"),
             t("若数据噪声大（评论 / 销量异常波动），暂缓不动", "If data is noisy (erratic reviews / sales swings), hold off"),
-            t("考虑放弃，时间投入到 Top Pick 类目", "Consider passing and reallocating your time to Top Pick categories"),
+            t("考虑放弃，时间投入到优选类目", "Consider passing and reallocating your time to Top Pick categories"),
         ],
     },
 }
@@ -68,6 +72,23 @@ ALL_ARCHETYPES = [
     ("冷门封闭",       "Avoid",      "",                                                False),
     ("待诊断",         "Avoid",      "",                                                False),
 ]
+
+# strategy_tag 数据值（英文，存于 csv）→ 显示名；查找/逻辑/颜色键仍用英文，仅渲染套用
+TAG_LABELS = {
+    "Top Pick":   t("优选", "Top Pick"),
+    "Hidden Gem": t("隐形机会", "Hidden Gem"),
+    "Crowded":    t("竞争拥挤", "Crowded"),
+    "Watch":      t("观察", "Watch"),
+    "Avoid":      t("不建议", "Avoid"),
+}
+# price band 数据值（英文，qcut 标签）→ 显示名；分箱/排序仍用英文，仅渲染套用
+BAND_ORDER = ["Low", "Mass", "Premium", "High Premium"]
+BAND_LABELS = {
+    "Low":          t("低价带", "Low"),
+    "Mass":         t("大众带", "Mass"),
+    "Premium":      t("高端带", "Premium"),
+    "High Premium": t("超高端带", "High Premium"),
+}
 
 # archetype 中文键 → 展示用英文 label（英文取自术语表；查找仍用中文键）
 ARCHETYPE_LABELS = {
@@ -325,7 +346,7 @@ c1, c2, c3, c4 = st.columns(4)
 c1.metric(t("综合机会分", "Composite Score"), f"{row['composite_score']:.3f}")
 c2.metric(t("等级", "Tier"), row["tier"])
 c3.metric(t("业务类型", "Archetype"), ARCHETYPE_LABELS.get(archetype, archetype))
-c4.metric(t("策略建议", "Strategy"), row["strategy_tag"])
+c4.metric(t("策略建议", "Strategy"), TAG_LABELS.get(row["strategy_tag"], row["strategy_tag"]))
 
 st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
@@ -390,14 +411,17 @@ else:
         )
         plot_df["metric"] = plot_df["metric"].map(
             {"supply_pct": lbl_supply, "demand_pct": lbl_demand})
+        plot_df["band_label"] = plot_df["band"].map(BAND_LABELS)
         fig = px.bar(
-            plot_df, x="band", y="pct", color="metric",
+            plot_df, x="band_label", y="pct", color="metric",
             barmode="group",
             color_discrete_map={lbl_supply: "#94a3b8", lbl_demand: "#3498db"},
             height=300,
-            labels={"band": t("价格带", "Price Band"), "pct": t("占比", "Share")},
+            labels={"band_label": t("价格带", "Price Band"), "pct": t("占比", "Share")},
         )
         fig.update_layout(
+            xaxis=dict(categoryorder="array",
+                       categoryarray=[BAND_LABELS[b] for b in BAND_ORDER]),
             yaxis=dict(tickformat=".0%"),
             margin=dict(l=10, r=10, t=10, b=10),
             legend=dict(orientation="h", y=1.1, title_text=""),
@@ -406,12 +430,13 @@ else:
 
     with pg_col2:
         display = bands.copy()
+        display["band"] = display["band"].map(lambda b: BAND_LABELS.get(b, b))
         display["supply_pct"] = display["supply_pct"].apply(lambda x: f"{x:.0%}")
         display["demand_pct"] = display["demand_pct"].apply(lambda x: f"{x:.0%}")
         display["gap"] = display["gap"].apply(lambda x: f"{x:+.1%}")
         display = display[["band", "price_range", "asin_count", "gap"]]
         display.columns = [t("价格带", "Price Band"), t("价格范围", "Price Range"),
-                           t("ASIN 数", "ASINs"), "Gap"]
+                           t("ASIN 数", "ASINs"), t("缺口", "Gap")]
         st.dataframe(display, hide_index=True, use_container_width=True)
 
     best = bands.loc[bands["gap"].idxmax()]
@@ -419,8 +444,9 @@ else:
         st.markdown(
             f"<div style='color:#27ae60; font-size:0.9rem; padding:8px 12px; "
             f"background:#f0fdf4; border-left:3px solid #27ae60; border-radius:4px; margin-top:8px;'>"
-            f"🎯 <b>{t('机会价格带', 'Opportunity price band')}</b>：{best['band']}（{best['price_range']}）"
-            f" — gap = {best['gap']:+.1%}{t('（需求 > 供给）', ' (demand > supply)')}"
+            f"🎯 <b>{t('机会价格带', 'Opportunity price band')}</b>："
+            f"{BAND_LABELS.get(best['band'], best['band'])}（{best['price_range']}）"
+            f" — {t('缺口', 'gap')} = {best['gap']:+.1%}{t('（需求 > 供给）', ' (demand > supply)')}"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -455,11 +481,11 @@ else:
         unsafe_allow_html=True,
     )
 
-    # 注：sig_meta 的键（opening/closing/stable）对应 s["direction"] 的查找键，保持英文；label 展示用同名英文
+    # 注：sig_meta 的键（opening/closing/stable）对应 s["direction"] 的查找键，保持英文；label 展示文案包 t()
     sig_meta = {
-        "opening": {"color": "#27ae60", "icon": "↓", "label": "opening"},
-        "closing": {"color": "#e74c3c", "icon": "↑", "label": "closing"},
-        "stable":  {"color": "#94a3b8", "icon": "—", "label": "stable"},
+        "opening": {"color": "#27ae60", "icon": "↓", "label": t("打开中", "opening")},
+        "closing": {"color": "#e74c3c", "icon": "↑", "label": t("关闭中", "closing")},
+        "stable":  {"color": "#94a3b8", "icon": "—", "label": t("稳定", "stable")},
     }
     sig_cols = st.columns(3)
     for i, s in enumerate(signals):
@@ -542,7 +568,8 @@ with st.expander(t("📋 13 业务类型完整框架（2 公开 / 11 加密 — 
             f"<span style='color:{lock_color}; font-size:0.9rem;'>{lock_icon}</span>"
             f"&nbsp;<b style='color:#2c3e50;'>{ARCHETYPE_LABELS.get(name, name)}</b>"
             f"&nbsp;<span style='display:inline-block; background:{badge_color}; "
-            f"color:#fff; font-size:0.72rem; padding:1px 6px; border-radius:3px; margin-left:4px;'>{strat}</span>"
+            f"color:#fff; font-size:0.72rem; padding:1px 6px; border-radius:3px; margin-left:4px;'>"
+            f"{TAG_LABELS.get(strat, strat)}</span>"
             f"{desc_html}"
             f"</div>",
             unsafe_allow_html=True,

@@ -1,5 +1,5 @@
 # demo/streamlit_app/pages/1_类目综合评分.py
-# 更新日期：2026-05-12
+# 更新日期：2026-06-24
 # 用途：Demo 版综合评分页（5 类目 + 5 strategy 全覆盖）
 # 与生产版差异：
 #   - 数据源 db → demo csv（in-memory sqlite）
@@ -7,6 +7,9 @@
 #   - Top 10 → Top 5（数据子集只有 5 类目）
 # 主要改动：
 #   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
+#   - 2026-06-24：同步生产版 — strategy_tag 加 TAG_LABELS 显示映射（优选/隐形机会/竞争拥挤/
+#                观察/不建议）、KPI「Crowded 占比」→「竞争拥挤占比」、散点轴去掉硬拼英文；
+#                内部颜色键/比较仍用英文
 
 import sys
 from pathlib import Path
@@ -87,6 +90,16 @@ TAG_COLOR = {
     "Avoid":      "#8d949b",
 }
 TAG_ORDER = ["Top Pick", "Hidden Gem", "Crowded", "Watch", "Avoid"]
+# strategy_tag 数据值（英文，存于 csv）→ 显示名；内部比较/颜色键仍用英文，仅渲染时套用
+TAG_LABELS = {
+    "Top Pick":   t("优选", "Top Pick"),
+    "Hidden Gem": t("隐形机会", "Hidden Gem"),
+    "Crowded":    t("竞争拥挤", "Crowded"),
+    "Watch":      t("观察", "Watch"),
+    "Avoid":      t("不建议", "Avoid"),
+}
+# 颜色映射的「显示名」版本（供 px 用显示名上色时复用 TAG_COLOR 口径）
+TAG_COLOR_LABEL = {TAG_LABELS[k]: v for k, v in TAG_COLOR.items()}
 
 TIER_THRESHOLDS = [
     (0.80, "高潜机会类目"),
@@ -284,7 +297,7 @@ k1.metric(t("分析类目数", "Categories analyzed"), f"{n_total}")
 k2.metric(t("高潜机会数", "High-potential count"), f"{n_high}",
           help=t("综合机会分 percentile ≥ 0.80", "Opportunity score percentile ≥ 0.80"))
 k3.metric(t("平均综合分", "Avg composite score"), f"{avg_score:.2f}")
-k4.metric(t("Crowded 占比", "Crowded share"), f"{crowded_pct:.0%}",
+k4.metric(t("竞争拥挤占比", "Crowded share"), f"{crowded_pct:.0%}",
           help=t("盘子大但开放度低的红海类目占比",
                  "Share of large but low-openness red-ocean categories"))
 
@@ -296,11 +309,13 @@ with top1:
     tag_cnt = (ranked["strategy_tag"].value_counts()
                .reindex(TAG_ORDER).fillna(0).astype(int).reset_index())
     tag_cnt.columns = ["tag", "n"]
-    fig = px.bar(tag_cnt, x="n", y="tag", orientation="h", text="n",
+    tag_cnt["tag_label"] = tag_cnt["tag"].map(TAG_LABELS)
+    fig = px.bar(tag_cnt, x="n", y="tag_label", orientation="h", text="n",
                  color="tag", color_discrete_map=TAG_COLOR, height=420)
     fig.update_traces(textposition="outside")
     fig.update_layout(showlegend=False, yaxis_title=None, xaxis_title=t("类目数", "Categories"),
-                      yaxis=dict(categoryorder="array", categoryarray=TAG_ORDER[::-1]),
+                      yaxis=dict(categoryorder="array",
+                                 categoryarray=[TAG_LABELS[x] for x in TAG_ORDER[::-1]]),
                       margin=dict(l=10, r=20, t=10, b=10))
     st.plotly_chart(fig, width="stretch")
 
@@ -316,16 +331,17 @@ with top2:
     plot_df = ranked.copy()
     plot_df["est_monthly_gmv_m"] = plot_df["est_monthly_gmv"].fillna(0) / 1_000_000.0
     plot_df["bubble_size"] = np.log1p(plot_df["est_monthly_gmv_m"].clip(lower=0))
+    plot_df["strategy_tag_label"] = plot_df["strategy_tag"].map(TAG_LABELS)
     fig = px.scatter(
         plot_df,
         x="composite_score", y="score_stability",
-        size="bubble_size", color="strategy_tag",
-        color_discrete_map=TAG_COLOR,
+        size="bubble_size", color="strategy_tag_label",
+        color_discrete_map=TAG_COLOR_LABEL,
         hover_name="category",
         custom_data=["est_monthly_gmv_m"],
         size_max=36, height=420,
-        labels={"composite_score": t("综合机会分 Opportunity Score", "Opportunity Score"),
-                "score_stability": t("结构稳定 StabilityScore", "Stability Score")},
+        labels={"composite_score": t("综合机会分", "Opportunity Score"),
+                "score_stability": t("结构稳定", "Stability Score")},
     )
     fig.update_traces(
         hovertemplate=(

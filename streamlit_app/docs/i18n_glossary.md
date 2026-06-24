@@ -103,7 +103,7 @@
 | 中文 | English |
 |---|---|
 | 最理想类目 / 优质机会 / 早期机会 | Ideal / Strong Opportunity / Early Opportunity |
-| Top Pick / Hidden Gem / Crowded / Watch / Avoid | Top Pick / Hidden Gem / Crowded / Watch / Avoid |
+| 优选 / 隐形机会 / 竞争拥挤 / 观察 / 不建议 | Top Pick / Hidden Gem / Crowded / Watch / Avoid |
 
 ## 通用 UI
 
@@ -149,6 +149,9 @@
 | 全能 / 矩阵 / 精品 / 均衡 / 轻量 / 铺货 / 爆品 | All-Rounder / Matrix / Boutique / Balanced / Light / Volume / Hit |
 | 稳定 / 高流动（留存后缀） | Stable / High Churn |
 | 价格带 / 机会价格带 | Price Band / Opportunity price band |
+| 低价带 / 大众带 / 高端带 / 超高端带 | Low / Mass / Premium / High Premium |
+| 缺口 | Gap |
+| 打开中 / 关闭中 / 稳定（市场窗口信号） | opening / closing / stable |
 | 供给（ASIN 占比）/ 需求（sales_heat 占比） | Supply (ASIN share) / Demand (sales-heat share) |
 | 特征 / 具体行动项 | Profile / Action items |
 | 得分 / 阈值 | score / threshold |
