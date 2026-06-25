@@ -1,5 +1,5 @@
 # demo/streamlit_app/pages/跨榜联动.py
-# 更新日期：2026-06-03
+# 更新日期：2026-06-25
 # 用途：Demo 版跨榜联动页（数据脱敏 + 5 类目）— BS/NR/MS 三榜联动，3 按钮切换
 # 启动：streamlit run demo/streamlit_app/产品概览.py
 # 与生产版差异：
@@ -11,6 +11,10 @@
 #                 Styler.background_gradient(cmap=...)，去除对 matplotlib 的依赖
 #                 （Streamlit Cloud requirements.txt 未含 matplotlib）
 #   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
+#   - 2026-06-25：同步生产版 — MS爆发强度类目排行条图改读法：末尾文字按头部倍数(P90÷中位)分白话档
+#                （普涨<3× / 有黑马3–10× / 强爆发>10×），条色改按头部倍数渐变(YlOrRd, cmin/cmax=1/10)；
+#                「尾部倍数」统一改称「头部倍数」；下钻漏斗阶段名「曾在源榜出现」→「入口」；
+#                P90 KPI help 简化为「仅头部10%高于此值」
 
 import sys
 from pathlib import Path
@@ -270,7 +274,7 @@ if view == "funnel":
                          f"{drill_cat} has an empty entry pool for the current source list"))
         else:
             STAGES = [
-                (t("曾在源榜出现", "Appeared on source list"),  drill_r["入口集"]),
+                (t("入口", "Entry pool"),  drill_r["入口集"]),
                 (t("后来进 BS", "Later reached BS"),     drill_r["进 BS"]),
                 (t("进过 BS Top50", "Reached BS Top50"), drill_r["Top50"]),
                 (t("进过 BS Top10", "Reached BS Top10"), drill_r["Top10"]),
@@ -313,14 +317,23 @@ elif view == "ms_burst":
                               "Defined as (previous rank − current rank) / previous rank "
                               "× 100%; median = typical single-day rank jump of an ASIN"))
             cs3.metric(t("P90 排名提升率", "P90 Rank Gain"), f"{p90_pct:,.0f}%",
-                       help=t("90 分位 — 90% 的 ASIN 提升率低于此值，10% 尾部跳升更猛",
-                              "90th percentile — 90% of ASINs gain less than this; "
-                              "the top 10% tail jumps even harder"))
+                       help=t("90 分位 — 仅头部 10% 的 ASIN 提升率高于此值，尾部跳升更猛",
+                              "90th percentile — only the top 10% of ASINs gain more than "
+                              "this; the tail jumps even harder"))
             cs4.metric(t("单条最大", "Single max"), f"{max_pct:,.0f}%")
 
             chart_spacer()
-            chart_title(t("● 类目 排名提升率排行（中位升序，颜色 = P90 强度）",
-                          "● Category rank-gain ranking (median asc, color = P90 intensity)"))
+            chart_title(t("● 类目 排名提升率排行（中位升序）",
+                          "● Category rank-gain ranking (median asc)"))
+            st.markdown(
+                "<div style='font-size:0.70rem; color:#6b7280; font-weight:400; "
+                "margin: -4px 0 8px 4px; line-height:1.3;'>"
+                + t("倍数×=P90÷中位，普涨(<3×) / 有黑马(3–10×) / 强爆发(>10×) · 颜色越深=倍数越大",
+                    "Ratio× = P90÷median; Broad rise (<3×) / Some breakouts (3–10×) / "
+                    "Extreme burst (>10×) · darker = higher ratio")
+                + "</div>",
+                unsafe_allow_html=True,
+            )
             df_pos = df[df["pct_chg_sales_rank"] > 0]
             cat_burst = (df_pos.groupby("category")
                          .agg(median_pct=("pct_chg_sales_rank", "median"),
@@ -331,24 +344,46 @@ elif view == "ms_burst":
                                    / cat_burst["median_pct"].replace(0, np.nan))
             top5_burst = set(cat_burst.tail(5)["category"].tolist())
 
+            # 头部倍数 → 分布形态档（白话），仅作文字标签；条色用倍数渐变（cmin/cmax 对齐档位界）
+            BURST_LABEL = {
+                "broad":   t("普涨", "Broad rise"),
+                "some":    t("有黑马", "Some breakouts"),
+                "extreme": t("强爆发", "Extreme burst"),
+                "na":      "—",
+            }
+            def _burst_key(r):
+                if pd.isna(r):
+                    return "na"
+                if r < 3:
+                    return "broad"
+                if r < 10:
+                    return "some"
+                return "extreme"
+            cat_burst["band_label"] = cat_burst["ratio"].map(_burst_key).map(BURST_LABEL)
+
             fig1 = go.Figure(go.Bar(
                 x=cat_burst["median_pct"], y=cat_burst["category"],
                 orientation="h",
-                marker=dict(color=cat_burst["p90_pct"], colorscale="Oranges",
-                            colorbar=dict(title="P90 (%)", thickness=12,
-                                          x=1.08, xpad=10),
-                            line=dict(color="#5b8fc4", width=0.5)),
-                customdata=cat_burst[["p90_pct", "ratio", "n_asin"]].values,
+                marker=dict(
+                    color=cat_burst["ratio"], colorscale="YlOrRd",
+                    cmin=1, cmax=10,
+                    colorbar=dict(title=t("头部倍数×", "Top ratio×"),
+                                  thickness=12, x=1.04, xpad=6),
+                    line=dict(color="white", width=0.5),
+                ),
+                customdata=cat_burst[["p90_pct", "ratio", "n_asin", "band_label"]].values,
                 hovertemplate=t("%{y}<br>中位 %{x:,.0f}%"
+                                "<br>分布形态：%{customdata[3]}"
                                 "<br>P90 %{customdata[0]:,.0f}%"
-                                "<br>尾部倍数 %{customdata[1]:.1f}× (P90/中位)"
+                                "<br>头部倍数 %{customdata[1]:.1f}× (P90/中位)"
                                 "<br>ASIN 数 %{customdata[2]:,.0f}<extra></extra>",
                                 "%{y}<br>Median %{x:,.0f}%"
+                                "<br>Shape: %{customdata[3]}"
                                 "<br>P90 %{customdata[0]:,.0f}%"
-                                "<br>Tail ratio %{customdata[1]:.1f}× (P90/median)"
+                                "<br>Top ratio %{customdata[1]:.1f}× (P90/median)"
                                 "<br>ASINs %{customdata[2]:,.0f}<extra></extra>"),
-                text=[f"{v:,.0f}% · <span style='color:#c0392b'><b>{r:.1f}×</b></span>"
-                      for v, r in zip(cat_burst["median_pct"], cat_burst["ratio"])],
+                text=[f"{v:,.0f}% · <b>{lab}</b>"
+                      for v, lab in zip(cat_burst["median_pct"], cat_burst["band_label"])],
                 textposition="outside",
                 cliponaxis=False,
             ))

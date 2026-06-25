@@ -1,5 +1,5 @@
 # demo/streamlit_app/pages/2_行动指引.py
-# 更新日期：2026-06-24
+# 更新日期：2026-06-25
 # 用途：Demo 版行动指引页（5 类目 + 5 strategy 全覆盖）
 # 与生产版差异：
 #   - 数据源 db → demo csv（in-memory sqlite）
@@ -11,6 +11,8 @@
 #                price band 加 BAND_LABELS（低价带/大众带/高端带/超高端带）显示映射；
 #                市场窗口信号 opening/closing/stable → 打开中/关闭中/稳定；Gap 列名中文化；
 #                13 业务类型框架的 strategy badge 用 TAG_LABELS 显示；内部数据值/逻辑键仍用英文
+#   - 2026-06-25：同步生产版改版 — 顶部 metric「等级 Tier」→「排名 #N/总数」（按综合机会分名次）；
+#                第 4 个 metric 标签「策略建议」→「策略标签」
 
 import sys
 from pathlib import Path
@@ -342,11 +344,18 @@ selected = st.selectbox(t("🔍 选择类目", "🔍 Select category"), cats, ke
 row = df[df["category"] == selected].iloc[0]
 archetype = row["archetype"]
 
+# 排名（按综合机会分在全部评分类目中的名次，替代原 Tier 等级）
+n_cats = len(df)
+ranks = df["composite_score"].rank(ascending=False, method="min")
+rank_pos = int(ranks[df["category"] == selected].iloc[0])
+
 c1, c2, c3, c4 = st.columns(4)
 c1.metric(t("综合机会分", "Composite Score"), f"{row['composite_score']:.3f}")
-c2.metric(t("等级", "Tier"), row["tier"])
+c2.metric(t("排名", "Rank"), f"#{rank_pos} / {n_cats}",
+          help=t("按综合机会分在全部评分类目中的名次",
+                 "Rank by opportunity score among all scored categories"))
 c3.metric(t("业务类型", "Archetype"), ARCHETYPE_LABELS.get(archetype, archetype))
-c4.metric(t("策略建议", "Strategy"), TAG_LABELS.get(row["strategy_tag"], row["strategy_tag"]))
+c4.metric(t("策略标签", "Strategy"), TAG_LABELS.get(row["strategy_tag"], row["strategy_tag"]))
 
 st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 

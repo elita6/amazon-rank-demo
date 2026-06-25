@@ -1,5 +1,5 @@
 # demo/streamlit_app/pages/1_类目综合评分.py
-# 更新日期：2026-06-24
+# 更新日期：2026-06-25
 # 用途：Demo 版综合评分页（5 类目 + 5 strategy 全覆盖）
 # 与生产版差异：
 #   - 数据源 db → demo csv（in-memory sqlite）
@@ -10,6 +10,10 @@
 #   - 2026-06-24：同步生产版 — strategy_tag 加 TAG_LABELS 显示映射（优选/隐形机会/竞争拥挤/
 #                观察/不建议）、KPI「Crowded 占比」→「竞争拥挤占比」、散点轴去掉硬拼英文；
 #                内部颜色键/比较仍用英文
+#   - 2026-06-25：同步生产版改版 — 删整个 KPI 行；「策略标签占比」+「策略矩阵」合并为树状图
+#                （全部类目→策略标签[块名带品类数]→品类，块大小∝品类数）；平均综合分由 KPI 卡
+#                改为 Top5 图上一条均分虚线；Top 3 雷达保留。（注：demo 脱敏无 Amazon Devices，
+#                未加生产版的「剔除 Amazon Devices」副标题）
 
 import sys
 from pathlib import Path
@@ -286,80 +290,54 @@ with st.sidebar:
 
 ranked = recompute(df, weights).sort_values("composite_score", ascending=False)
 
-# KPI
+# 派生量（KPI 卡已按反馈删除；n_total / avg_score 仍用于 Top5 基准虚线）
 n_total = len(ranked)
-n_high = int((ranked["tier"] == "高潜机会类目").sum())
-avg_score = ranked["composite_score"].mean()
-crowded_pct = (ranked["strategy_tag"] == "Crowded").sum() / n_total if n_total > 0 else 0
+avg_score = ranked["composite_score"].mean()  # 全部类目均分 → Top5 图基准线
 
-k1, k2, k3, k4 = st.columns(4)
-k1.metric(t("分析类目数", "Categories analyzed"), f"{n_total}")
-k2.metric(t("高潜机会数", "High-potential count"), f"{n_high}",
-          help=t("综合机会分 percentile ≥ 0.80", "Opportunity score percentile ≥ 0.80"))
-k3.metric(t("平均综合分", "Avg composite score"), f"{avg_score:.2f}")
-k4.metric(t("竞争拥挤占比", "Crowded share"), f"{crowded_pct:.0%}",
-          help=t("盘子大但开放度低的红海类目占比",
-                 "Share of large but low-openness red-ocean categories"))
+# 上半区：左 = 标签 × 品类（树状图）；右 = Top 3 雷达
+top1, top2 = st.columns([2.0, 1.2])
 
-# 上半区 3 panel
-top1, top2, top3 = st.columns([1.1, 1.6, 1.3])
-
+# Panel 1：策略标签 × 品类（树状图 treemap）—— 合并原「策略标签占比」+「策略矩阵」
 with top1:
-    chart_title(t("● 策略标签占比", "● Strategy Tag Mix"))
-    tag_cnt = (ranked["strategy_tag"].value_counts()
-               .reindex(TAG_ORDER).fillna(0).astype(int).reset_index())
-    tag_cnt.columns = ["tag", "n"]
-    tag_cnt["tag_label"] = tag_cnt["tag"].map(TAG_LABELS)
-    fig = px.bar(tag_cnt, x="n", y="tag_label", orientation="h", text="n",
-                 color="tag", color_discrete_map=TAG_COLOR, height=420)
-    fig.update_traces(textposition="outside")
-    fig.update_layout(showlegend=False, yaxis_title=None, xaxis_title=t("类目数", "Categories"),
-                      yaxis=dict(categoryorder="array",
-                                 categoryarray=[TAG_LABELS[x] for x in TAG_ORDER[::-1]]),
-                      margin=dict(l=10, r=20, t=10, b=10))
-    st.plotly_chart(fig, width="stretch")
-
-with top2:
-    chart_title(t("● 策略矩阵：综合机会分 × 结构稳定", "● Strategy Matrix: Opportunity Score × Stability"))
+    chart_title(t("● 品类策略标签分布", "● Category Strategy-Tag Distribution"))
     st.markdown(
         "<div style='font-size:0.70rem; color:#6b7280; font-weight:400; "
         "margin: -4px 0 8px 4px; line-height:1.3;'>"
-        + t("气泡 = log1p 月 GMV M", "Bubble = log1p monthly GMV ($M)")
+        + t("外层=策略标签（括号内为品类数）· 内层=品类 · 块大小按品类数 · 悬停看综合分/GMV",
+            "Outer = strategy tag (count in parens) · inner = category · "
+            "tile size by category count · hover for score / GMV")
         + "</div>",
         unsafe_allow_html=True,
     )
-    plot_df = ranked.copy()
-    plot_df["est_monthly_gmv_m"] = plot_df["est_monthly_gmv"].fillna(0) / 1_000_000.0
-    plot_df["bubble_size"] = np.log1p(plot_df["est_monthly_gmv_m"].clip(lower=0))
-    plot_df["strategy_tag_label"] = plot_df["strategy_tag"].map(TAG_LABELS)
-    fig = px.scatter(
-        plot_df,
-        x="composite_score", y="score_stability",
-        size="bubble_size", color="strategy_tag_label",
-        color_discrete_map=TAG_COLOR_LABEL,
-        hover_name="category",
-        custom_data=["est_monthly_gmv_m"],
-        size_max=36, height=420,
-        labels={"composite_score": t("综合机会分", "Opportunity Score"),
-                "score_stability": t("结构稳定", "Stability Score")},
+    seg = ranked.copy()
+    seg["tag_label"] = seg["strategy_tag"].map(TAG_LABELS)
+    seg["gmv_m"] = seg["est_monthly_gmv"].fillna(0) / 1_000_000.0
+    seg["val"] = 1  # 每个品类等权 → 标签块面积 ∝ 品类数（每个品类必显示）
+    counts = seg["tag_label"].value_counts()
+    seg["tag_disp"] = seg["tag_label"].map(lambda x: f"{x} ({counts[x]})")
+    fig = px.treemap(
+        seg,
+        path=[px.Constant(t("全部类目", "All categories")), "tag_disp", "category"],
+        values="val",
+        color="strategy_tag", color_discrete_map=TAG_COLOR,
+        custom_data=["composite_score", "gmv_m"],
+        height=440,
     )
     fig.update_traces(
+        texttemplate="%{label}",
+        textfont=dict(size=12),
+        marker=dict(line=dict(color="white", width=1.5)),
+        root_color="#f1f3f5",
         hovertemplate=(
-            "<b>%{hovertext}</b><br>"
-            + t("综合机会分：", "Opportunity Score: ") + "%{x:.2f}<br>"
-            + t("结构稳定：", "Stability: ") + "%{y:.2f}<br>"
-            + t("预估月 GMV：", "Est. monthly GMV: ") + "%{customdata[0]:.1f} M USD<extra></extra>"
-        )
+            "<b>%{label}</b><br>"
+            + t("综合机会分：", "Opportunity Score: ") + "%{customdata[0]:.2f}<br>"
+            + t("预估月 GMV：", "Est. monthly GMV: ") + "%{customdata[1]:.1f} M USD<extra></extra>"
+        ),
     )
-    fig.add_vline(x=0.6, line_dash="dash", line_color="gray")
-    fig.add_hline(y=0.6, line_dash="dash", line_color="gray")
-    fig.add_annotation(x=0.95, y=0.95, text=t("目标区 (高分+稳)", "Target zone (high score + stable)"),
-                       showarrow=False, font=dict(color="gray", size=11))
-    fig.update_layout(legend_title_text=t("策略标签", "Strategy Tag"),
-                      margin=dict(l=10, r=10, t=10, b=10))
+    fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
     st.plotly_chart(fig, width="stretch")
 
-with top3:
+with top2:
     chart_title(t("● Top 3 综合分类目 · 5 维画像", "● Top 3 Categories · 5-Factor Profile"))
     top3_df = ranked.head(3)
     radar_dims = DIM_COLS
@@ -379,8 +357,8 @@ with top3:
         ))
     fig.update_layout(
         polar=dict(radialaxis=dict(range=[0, 1], showticklabels=True, tickfont=dict(size=9))),
-        showlegend=True, height=420,
-        legend=dict(orientation="v", yanchor="top", y=1.05, xanchor="left", x=0.0, font=dict(size=10)),
+        showlegend=True, height=440,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.18, xanchor="center", x=0.5, font=dict(size=10)),
         margin=dict(l=40, r=10, t=10, b=10),
     )
     st.plotly_chart(fig, width="stretch")
@@ -409,6 +387,15 @@ fig.add_trace(
         marker=dict(size=10, symbol="diamond"),
     ),
     secondary_y=True,
+)
+# 全部类目均分基准虚线（替代原 KPI「平均综合分」）
+fig.add_hline(
+    y=avg_score, line_dash="dash", line_color="#6b7280", line_width=1.5,
+    annotation_text=t(f"全部 {n_total} 类目均分 {avg_score:.2f}",
+                      f"All-{n_total} avg {avg_score:.2f}"),
+    annotation_position="top left",
+    annotation_font=dict(size=11, color="#6b7280"),
+    secondary_y=False,
 )
 fig.update_layout(
     height=380, hovermode="x unified",
