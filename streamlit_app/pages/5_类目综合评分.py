@@ -359,7 +359,7 @@ with top2:
         polar=dict(radialaxis=dict(range=[0, 1], showticklabels=True, tickfont=dict(size=9))),
         showlegend=True, height=440,
         legend=dict(orientation="h", yanchor="bottom", y=-0.18, xanchor="center", x=0.5, font=dict(size=10)),
-        margin=dict(l=40, r=10, t=10, b=10),
+        margin=dict(l=60, r=75, t=30, b=25),
     )
     st.plotly_chart(fig, width="stretch")
 
