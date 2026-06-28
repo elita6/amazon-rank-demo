@@ -1,8 +1,10 @@
-# v1/streamlit_app/_styles.py
-# 更新日期：2026-05-01
+# streamlit_app/_styles.py
+# 更新日期：2026-06-28
 # 用途：Streamlit 多看板共用的 CSS 样式 + 标题/卡片工具
 # 调用：每个 page 顶部 from _styles import inject_global_style, app_header, page_title
 # 主要改动：
+#   - 2026-06-28：同步生产 v2 — app_header 加副标题（保留 · Demo 品牌）；新增 insight_box
+#                （图表「📊 解读」框，供各页数据驱动解读使用）。CSS 本体不变。
 #   - 2026-04-30 v2：H1 改深蓝渐变；H2 fit-content 竖线；H3 缩进+下划线
 #   - 2026-05-01 v3：H2 竖线改 H1 渐变最深色（#1e3a5f）保持视觉一致；
 #                新增 app_header（全局共享大标题「Amazon 类目机会评分系统」）；
@@ -321,10 +323,15 @@ def inject_global_style():
 def app_header():
     """全局共享大标题（每页顶部都渲染）"""
     title = t("Amazon 类目机会评分系统 · Demo", "Amazon Category Opportunity Scorer · Demo")
+    subtitle = t(
+        "基于 BS / NR / MS 三类榜单 · 类目机会评估 + 优先级排序 + 行动指引",
+        "Powered by BS / NR / MS rankings · Category opportunity assessment + priority ranking + playbook",
+    )
     st.markdown(
         f"""
         <div class='app-header'>
           {title}
+          <div class='app-subtitle'>{subtitle}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -351,3 +358,23 @@ def chart_spacer():
 
 def conclusion(text):
     st.markdown(f"<div class='conclusion-box'>📌 {text}</div>", unsafe_allow_html=True)
+
+
+def insight_box(items, title=None):
+    """图表「自动解读」框：📊 标题 + 要点列表。
+
+    items = list[str]（每条一个要点，可含 HTML 加粗 <b>）。title 省略则用默认「解读」。
+    数据驱动模板化：调用方用画图的同一份数据算出要点字符串传入，口径与图一致、无 AI。
+    全页面通用：任何图下方 insight_box([...]) 即可接入。
+    """
+    if not items:
+        return
+    head = title or t("解读", "Summary")
+    lis = "".join(f"<li style='margin:2px 0;'>{x}</li>" for x in items)
+    st.markdown(
+        "<div style='background:#f4f8ff;border-left:3px solid #4a72d0;border-radius:6px;"
+        "padding:8px 12px;margin:6px 0 2px;font-size:0.78rem;color:#2c3e50;line-height:1.5;'>"
+        f"<div style='font-weight:600;margin-bottom:3px;'>📊 {head}</div>"
+        f"<ul style='margin:0;padding-left:18px;'>{lis}</ul></div>",
+        unsafe_allow_html=True,
+    )

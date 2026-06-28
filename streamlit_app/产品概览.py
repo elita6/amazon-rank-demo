@@ -34,14 +34,14 @@ lang_toggle()          # 侧边栏顶部 中文 | EN
 app_header()           # 全局大标题（双语）
 
 # 导航：标题用 t() 随语言切换；url_path 固定 ASCII 不随语言变（落地页卡片链接据此跳转）
+# 对齐生产 v2：5 页 —「头部品牌竞争」改名 + 删除独立「ASIN 流动性」页（黏性表已并入「跨榜联动」）
 pages = [
-    st.Page("_landing.py",           title=t("产品概览",   "Product Overview"),  url_path="overview",         default=True),
-    st.Page("pages/1_类目详情.py",     title=t("类目详情",   "Category Detail"),    url_path="category-detail"),
-    st.Page("pages/2_品牌竞争.py",     title=t("品牌竞争",   "Brand Competition"),  url_path="brand-competition"),
-    st.Page("pages/3_ASIN流动性.py",   title=t("ASIN 流动性", "ASIN Liquidity"),     url_path="asin-liquidity"),
-    st.Page("pages/4_跨榜联动.py",     title=t("跨榜联动",   "Cross-List Linkage"), url_path="cross-list"),
-    st.Page("pages/5_类目综合评分.py", title=t("类目综合评分", "Composite Score"),    url_path="composite-score"),
-    st.Page("pages/6_行动指引.py",     title=t("行动指引",   "Action Playbook"),    url_path="action-playbook"),
+    st.Page("_landing.py",             title=t("产品概览",   "Product Overview"),  url_path="overview",         default=True),
+    st.Page("pages/1_类目详情.py",       title=t("类目详情",   "Category Detail"),    url_path="category-detail"),
+    st.Page("pages/2_头部品牌竞争.py",   title=t("头部品牌竞争", "Head-Brand Competition"),  url_path="brand-competition"),
+    st.Page("pages/3_跨榜联动.py",       title=t("跨榜联动",   "Cross-List Linkage"), url_path="cross-list"),
+    st.Page("pages/4_类目综合评分.py",   title=t("类目综合评分", "Composite Score"),    url_path="composite-score"),
+    st.Page("pages/5_行动指引.py",       title=t("行动指引",   "Action Playbook"),    url_path="action-playbook"),
 ]
 
 st.navigation(pages).run()

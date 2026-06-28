@@ -1,13 +1,14 @@
 # streamlit_app/_landing.py
-# 更新日期：2026-06-23
-# 用途：Demo 落地页正文（产品定位 + 数据流 + 6 页架构 + 方法论概览）
+# 更新日期：2026-06-28
+# 用途：Demo 落地页正文（产品定位 + 数据流 + 5 页架构 + 方法论概览）
 #       作为 st.navigation 的默认 page；入口路由器是同目录的 产品概览.py
 # 启动：streamlit run streamlit_app/产品概览.py（经路由器加载本页）
 # 主要改动：
-#   - 2026-06-01：6 页全部公开（品牌竞争 / ASIN流动性 / 跨榜联动 解锁为 demo），
-#                 Demo banner「公开 3/6」→「公开 6/6」；架构卡片去掉「✅ Demo 可访问 /
-#                 🔒 完整版」图例与徽章（均已开放，徽章冗余），卡片统一绿边框 + 可点箭头
+#   - 2026-06-01：页面全部公开；卡片统一绿边框 + 可点箭头
 #   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
+#   - 2026-06-28：对齐生产 v2 — 6 页 → 5 页（「头部品牌竞争」改名 + 删除独立「ASIN 流动性」页，
+#                 黏性表并入「跨榜联动」）；方法论卡片 archetype/strategy → Opportunity Signals +
+#                 5 档优先级类型；页面描述同步 v2 新模块。
 
 import sys
 from pathlib import Path
@@ -20,59 +21,50 @@ from _styles import page_title
 from _i18n import t
 
 
-# 6 页 dashboard 架构
+# 5 页 dashboard 架构（对齐生产 v2：头部品牌竞争 + 删除独立「ASIN 流动性」页，黏性表并入「跨榜联动」）
 PAGES = [
     {
         "n": 1,
         "icon": "📊",
         "title": t("类目详情", "Category Detail"),
-        "desc": t("类目层描述性分析：基本指标+基础分布 +交叉图",
-                  "Category-level descriptive analysis: key metrics + distributions + cross plots"),
+        "desc": t("类目层描述性分析：基本指标 + 基础分布 + 需求增量/存量象限图",
+                  "Category-level descriptive analysis: key metrics + distributions + demand increment/stock quadrant"),
         "demo": True,
         "url": "/category-detail",
     },
     {
         "n": 2,
         "icon": "🏆",
-        "title": t("品牌竞争", "Brand Competition"),
-        "desc": t("品牌画像 + CR3 经营形态 + 集中度演变",
-                  "Brand profiles + CR3 operating types + concentration trends"),
+        "title": t("头部品牌竞争", "Head-Brand Competition"),
+        "desc": t("CR3 双基准集中度（坑位 × 需求）+ 单类目品牌 Treemap 下钻",
+                  "CR3 dual-basis concentration (shelf × demand) + per-category brand Treemap drill-down"),
         "demo": True,
         "url": "/brand-competition",
     },
     {
         "n": 3,
-        "icon": "🔁",
-        "title": t("ASIN 流动性", "ASIN Liquidity"),
-        "desc": t("Top 100 在榜时间分布 / 流入流出情况",
-                  "Top 100 time-on-list distribution / inflow & outflow"),
-        "demo": True,
-        "url": "/asin-liquidity",
-    },
-    {
-        "n": 4,
         "icon": "🔄",
         "title": t("跨榜联动", "Cross-List Linkage"),
-        "desc": t("BS / NR / MS 三榜 ASIN 跨榜流转情况",
-                  "ASIN flow across the BS / NR / MS rankings"),
+        "desc": t("ASIN 流动性（在榜率/满榜率/新增比例/→BS渗透）+ MS 爆发强度",
+                  "ASIN liquidity (on-list / full-list / new-ASIN / →BS penetration) + MS burst intensity"),
         "demo": True,
         "url": "/cross-list",
     },
     {
-        "n": 5,
+        "n": 4,
         "icon": "🎯",
         "title": t("类目综合评分", "Composite Score"),
-        "desc": t("评分系统：多维模型 + 双层加权 + 策略偏好动态调整",
-                  "Scoring system: multi-factor model + two-layer weighting + dynamic strategy preferences"),
+        "desc": t("评分系统：5 维模型 + 双层加权 + 权重偏好动态调整 + 优先级类型分布",
+                  "Scoring system: 5-factor model + two-layer weighting + dynamic weight preferences + priority-type distribution"),
         "demo": True,
         "url": "/composite-score",
     },
     {
-        "n": 6,
+        "n": 5,
         "icon": "🧭",
         "title": t("行动指引", "Action Playbook"),
-        "desc": t("单类目深度：重点 ASIN / 价格机会 / 市场窗口 / 打法建议",
-                  "Single-category deep dive: top ASINs / price gaps / market window / playbook"),
+        "desc": t("单类目深度：优先级类型 + 优势/约束信号 + 价位带参考 + 重点 ASIN",
+                  "Single-category deep dive: priority type + strength/constraint signals + price-band reference + top ASINs"),
         "demo": True,
         "url": "/action-playbook",
     },
@@ -81,7 +73,7 @@ PAGES = [
 DATA_FLOW = [
     ("📥", t("数据采集", "Data Collection"),   t("BS / NR / MS 榜单", "BS / NR / MS rankings")),
     ("💾", t("数据入库", "Data Ingestion"),   t("解析清洗 + 日度指标聚合", "Parsing & cleaning + daily metric aggregation")),
-    ("⚖️", t("评分建模", "Scoring & Modeling"),   t("5 维评分 + 双层加权 + 业务类型诊断", "5-factor scoring + two-layer weighting + archetype diagnosis")),
+    ("⚖️", t("评分建模", "Scoring & Modeling"),   t("5 维评分 + 双层加权 + 优先级类型 + 优势/约束信号", "5-factor scoring + two-layer weighting + priority tiers + opportunity signals")),
     ("📈", "Dashboard",   t("可视化 + 行动指引", "Visualization + action playbook")),
 ]
 
@@ -148,12 +140,15 @@ for ai in arrow_indices:
 # ---------------------------------------------------------------
 # 2. 6 页 Dashboard 架构
 # ---------------------------------------------------------------
-st.markdown("## " + t("Dashboard 6 页架构", "Dashboard — 6-Page Architecture"))
+st.markdown("## " + t("Dashboard 5 页架构", "Dashboard — 5-Page Architecture"))
 
-for row in range(2):
+for row in range((len(PAGES) + 2) // 3):
     cols = st.columns(3)
     for i in range(3):
-        p = PAGES[row * 3 + i]
+        idx = row * 3 + i
+        if idx >= len(PAGES):
+            continue
+        p = PAGES[idx]
         with cols[i]:
             # 6 页均已开放：统一绿边框 + 右下角可点绿圆箭头
             arrow_html = (
@@ -211,17 +206,15 @@ with m2:
         "<div style='background:#fdf2f8; border-left:4px solid #c026d3; "
         "border-radius:6px; padding:14px 16px; min-height:200px;'>"
         "<div style='font-size:1.0rem; font-weight:600; color:#1a2940; margin-bottom:8px;'>"
-        + t("业务类型诊断", "Archetype Diagnosis") + "</div>"
+        + t("Opportunity Signals", "Opportunity Signals") + "</div>"
         "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
         + t(
-            "5 维各分 <b>H / M / L</b>分层阈值<br><br>"
-            "组合业务类型：<br>"
-            "如「新兴机会」「高热红海」「高成长高波动」<br><br>"
-            "<b>优先级匹配</b>：跨维度特征强的先命中，第一个命中即停",
-            "Each of the 5 factors is split into <b>H / M / L</b> threshold tiers<br><br>"
-            "Combined into archetypes:<br>"
-            '"Emerging Opportunity", "Hot Red Ocean", "High-Growth High-Volatility"<br><br>'
-            "<b>Priority matching</b>: archetypes with stronger cross-factor signals match first, stopping at the first hit",
+            "对 A / C / M / T 四维做<b>百分位</b>切线<br><br>"
+            "<b>优势信号</b>（≥P75）：需求强劲 / 市场开放 / 增长强劲 / 结构稳定<br><br>"
+            "<b>约束信号</b>（≤P25）：需求疲弱 / 品牌壁垒 / 增长乏力 / 结构不稳",
+            "Percentile cutoffs over the A / C / M / T factors<br><br>"
+            "<b>Strengths</b> (&ge;P75): Strong Demand / Open Market / High Momentum / Stable Structure<br><br>"
+            "<b>Constraints</b> (&le;P25): Weak Demand / Brand Barrier / Weak Momentum / Unstable Structure",
         )
         + "</div></div>",
         unsafe_allow_html=True,
@@ -232,19 +225,21 @@ with m3:
         "<div style='background:#f0fdf4; border-left:4px solid #16a34a; "
         "border-radius:6px; padding:14px 16px; min-height:200px;'>"
         "<div style='font-size:1.0rem; font-weight:600; color:#1a2940; margin-bottom:8px;'>"
-        + t("5 类策略决策", "5 Strategy Decisions") + "</div>"
+        + t("5 档优先级类型", "5 Priority Tiers") + "</div>"
         "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
         + t(
-            "<b>Top Pick</b> — 推荐主投<br>"
-            "<b>Hidden Gem</b> — 择时进入<br>"
-            "<b>Crowded</b> — niche 切入<br>"
-            "<b>Watch</b> — 长线观察<br>"
-            "<b>Avoid</b> — 慎入<br><br>",
-            "<b>Top Pick</b> — recommended core bet<br>"
-            "<b>Hidden Gem</b> — enter on timing<br>"
-            "<b>Crowded</b> — niche entry<br>"
-            "<b>Watch</b> — long-term monitor<br>"
-            "<b>Avoid</b> — enter with caution<br><br>",
+            "按综合机会分<b>百分位</b>分 5 档：<br>"
+            "<b>高潜机会</b> — 推荐优先<br>"
+            "<b>较高机会</b> — 重点关注<br>"
+            "<b>中性观察</b> — 均衡待察<br>"
+            "<b>谨慎评估</b> — 谨慎权衡<br>"
+            "<b>暂不考虑</b> — 暂缓<br><br>",
+            "5 tiers by composite-score <b>percentile</b>:<br>"
+            "<b>Top</b> — prioritize<br>"
+            "<b>High</b> — strong focus<br>"
+            "<b>Balanced</b> — monitor<br>"
+            "<b>Watch</b> — weigh carefully<br>"
+            "<b>Skip</b> — defer<br><br>",
         )
         + "</div></div>",
         unsafe_allow_html=True,
