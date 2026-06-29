@@ -1,5 +1,5 @@
 # streamlit_app/pages/5_行动指引.py
-# 更新日期：2026-06-28
+# 更新日期：2026-06-29
 # 用途：行动指引页（Demo 版，对齐生产 v2）— 单类目深度。
 #       模块：摘要（优先级类型 + Opportunity Signals 优势/约束）→ 价位带参考（100% 堆积条）→ 重点 ASIN。
 # 启动命令：streamlit run streamlit_app/产品概览.py
@@ -10,6 +10,14 @@
 #     优势取分值最高 2 个、约束取最严 1 个）从 5 维分现算，非造数据。
 #   - 优先级类型(Tier)：从 composite_score 百分位重算（与综合评分页同口径）。
 # 主要改动：
+#   - 2026-06-29（信号体系同步生产 v2）：① 增长动能(momentum)退出优势/约束信号（方向歧义）——
+#       SIG_DIMS 删 momentum 维（不再生成 High/Weak Momentum 信号）、SIGNAL_LABELS 同删两键。
+#       ② 需求信号软化为「需求居前/需求居后」(Top/Bottom-quartile demand)。③ 结构稳定信号改
+#       「波动较小/波动较大」(Low/High volatility)。均仅改显示名，内部英文键不变。
+#   - 2026-06-29：关注理由列 + 重点 ASIN 说明措辞统一为简写——🚀NR榜新品冲进BS榜 /
+#       ⬆️BS榜内排名爬升X名(r0→r1) / 📈MS榜排名飙升+X%（仅改展示字符串，信号逻辑/阈值不变）。
+#   - 2026-06-29：修「关注理由」列语言切不动的缓存 bug——compute_top_opportunity_asins 加 lang
+#       参数（仅用于 @st.cache_data 缓存分桶），调用处传 get_lang()，使中/英各缓存一份、切换后重算。
 #   - 2026-06-28：从生产 v2 pages/5_行动指引.py 移植；信号/Tier 由 db 列改为现算（CSV 后端适配）。
 
 import sys
@@ -24,7 +32,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "streamlit_app"))
 from _styles import page_title, chart_title, insight_box
-from _i18n import t
+from _i18n import t, get_lang
 from _brands import normalize_brand   # 统一品牌口径（归一化去重）
 from _demo_data import connect_demo
 
@@ -46,21 +54,21 @@ TIER_LABEL = {
     "中性观察类目": t("中性观察", "Balanced"), "谨慎评估类目": t("谨慎评估", "Watch"),
     "暂不考虑类目": t("暂不考虑", "Skip"),
 }
-# 信号中英显示名（正向=优势/绿 chip，负向=约束/琥珀 chip）
+# 信号中英显示名（db 英文键不变，仅改显示；正向=优势/绿 chip，负向=约束/琥珀 chip）
+# momentum 不参与信号（方向歧义：高=有上升通道/也=赛道变挤），故无 High/Weak Momentum 映射
 SIGNAL_LABELS = {
-    "Strong Demand":    t("需求强劲", "Strong Demand"),   "Open Market":        t("市场开放", "Open Market"),
-    "High Momentum":    t("增长强劲", "High Momentum"),   "Stable Structure":   t("结构稳定", "Stable Structure"),
-    "Weak Demand":      t("需求疲弱", "Weak Demand"),     "Brand Barrier":      t("品牌壁垒", "Brand Barrier"),
-    "Weak Momentum":    t("增长乏力", "Weak Momentum"),   "Unstable Structure": t("结构不稳", "Unstable Structure"),
+    "Strong Demand":    t("需求居前", "Top-quartile demand"), "Open Market":     t("市场开放", "Open Market"),
+    "Weak Demand":      t("需求居后", "Bottom-quartile demand"), "Brand Barrier":  t("品牌壁垒", "Brand Barrier"),
+    "Stable Structure": t("波动较小", "Low volatility"), "Unstable Structure": t("波动较大", "High volatility"),
 }
 STRENGTH_BG, CONSTRAINT_BG = "#e8f6ef", "#fdece4"
 STRENGTH_FG, CONSTRAINT_FG = "#1e8449", "#ba4a00"
 
 # ---- 信号 / Tier 现算配置（= 生产 v2 scoring_config.yaml opportunity_signals + tier_thresholds）----
+# 注：momentum 不参与信号（= 生产 v2，方向歧义），故 SIG_DIMS 不含 momentum 维 → 不生成任何动能信号
 SIG_DIMS = [
     {"key": "market_size", "col": "score_market_size", "positive": "Strong Demand",   "risk": "Weak Demand"},
     {"key": "openness",    "col": "score_openness",    "positive": "Open Market",      "risk": "Brand Barrier"},
-    {"key": "momentum",    "col": "score_momentum",    "positive": "High Momentum",    "risk": "Weak Momentum"},
     {"key": "stability",   "col": "score_stability",   "positive": "Stable Structure", "risk": "Unstable Structure"},
 ]
 SIG_PCT_LOW, SIG_PCT_HIGH = 0.25, 0.75
@@ -112,7 +120,7 @@ def compute_signals(df):
 
 
 def _sig_chips(s, bg, fg):
-    """'Strong Demand + High Momentum' → 彩色 chip；空→灰 —"""
+    """'Strong Demand + Open Market' → 彩色 chip；空→灰 —"""
     if s is None or (isinstance(s, float) and pd.isna(s)) or str(s).strip() in ("", "—", "None", "nan"):
         return "<span style='color:#c2c8cf;'>—</span>"
     return "".join(
@@ -168,8 +176,10 @@ MS_TOP = 8            # MS 候选最多取这么多（按飙升幅度）
 
 
 @st.cache_data
-def compute_top_opportunity_asins(category, top_n=10):
-    """重点 ASIN（上升势头清单）：三路信号 + 关注理由。返回 (Top N 表, 已排除品牌分组列表)。"""
+def compute_top_opportunity_asins(category, lang, top_n=10):
+    """重点 ASIN（上升势头清单）：三路信号 + 关注理由。返回 (Top N 表, 已排除品牌分组列表)。
+    lang 仅用于缓存分桶（让 @st.cache_data 对中/英各缓存一份），使语言切换后 reason 文案重算；
+    函数体不直接使用它——reason 里的 t() 仍读全局 session，与调用时传入的 lang 一致。"""
     conn = connect_demo()
     rows = pd.read_sql(
         "SELECT date, list_type, rank, brand, asin, price_low, review_count, rate, "
@@ -207,7 +217,7 @@ def compute_top_opportunity_asins(category, top_n=10):
     nr_first = nr.groupby("asin")["date"].min()
     for a in bs_first.index.intersection(nr_first.index):
         if a in latest.index and (bs_first[a] - nr_first[a]).days > 0:
-            sigs.append((a, 0, 0.0, t("🚀 新品冲入畅销榜", "🚀 New release → bestseller")))
+            sigs.append((a, 0, 0.0, t("🚀 NR榜新品冲进BS榜", "🚀 NR new release → BS bestseller")))
     # ② BS 榜内排名爬升（首现名次 − 最新名次 ≥ CLIMB_MIN）
     bs_pool = bs[~bs["brand_norm"].isin(blocked)]
     for a, g in bs_pool.groupby("asin"):
@@ -220,8 +230,8 @@ def compute_top_opportunity_asins(category, top_n=10):
         climb = r0 - r1
         if climb >= CLIMB_MIN:
             sigs.append((a, 1, float(climb),
-                         t(f"⬆️ BS排名爬升 {climb} 名（{r0}→{r1}）",
-                           f"⬆️ Climbed {climb} BS spots ({r0}→{r1})")))
+                         t(f"⬆️ BS 榜内排名爬升{climb}名（{r0}→{r1}）",
+                           f"⬆️ Climbed {climb} spots within BS ({r0}→{r1})")))
     # ③ MS 飙升：每 ASIN 取最大提升率；剔除 >MS_SURGE_CAP 的，取真实值 Top
     ms_pool = ms[~ms["brand_norm"].isin(blocked)].dropna(subset=["pct_chg_sales_rank"])
     if not ms_pool.empty:
@@ -229,7 +239,7 @@ def compute_top_opportunity_asins(category, top_n=10):
         ms_best = ms_best[(ms_best > 0) & (ms_best <= MS_SURGE_CAP)].sort_values(ascending=False).head(MS_TOP)
         for a, v in ms_best.items():
             if a in latest.index:
-                sigs.append((a, 2, float(v), t(f"📈 排名飙升 +{v:.0f}%", f"📈 Rank surge +{v:.0f}%")))
+                sigs.append((a, 2, float(v), t(f"📈 MS榜排名飙升+{v:.0f}%", f"📈 MS rank surge +{v:.0f}%")))
     if not sigs:
         return None, excluded_groups
 
@@ -484,10 +494,10 @@ st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 chart_title(f"● {t('重点 ASIN', 'Top ASINs to Watch')} — {selected}")
 st.caption(t(
     "正在「上升」、值得关注的产品（已剔 Amazon 自营族）。三类上升信号平衡选取："
-    "🚀 新品冲入畅销榜（NR→BS） · ⬆️ BS 榜内排名爬升 · 📈 MS 飙升。",
+    "🚀 NR榜新品冲进BS榜 · ⬆️ BS榜内排名爬升 · 📈 MS榜排名飙升。",
     "Products on the rise (Amazon family excluded), balanced across three signals: "
-    "🚀 new release → bestseller · ⬆️ climbing within BS · 📈 Movers&Shakers surge."))
-top_df, excluded_brands = compute_top_opportunity_asins(selected, top_n=10)
+    "🚀 NR new release → BS bestseller · ⬆️ climbing within BS · 📈 MS rank surge."))
+top_df, excluded_brands = compute_top_opportunity_asins(selected, get_lang(), top_n=10)
 if excluded_brands:
     st.caption(t("注：已排除 Amazon 品牌族：", "Note: excluded Amazon family: ")
                + ", ".join(excluded_brands))

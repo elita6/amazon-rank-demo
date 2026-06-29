@@ -1,6 +1,6 @@
 # i18n 术语表（中英对照）
 
-> 更新日期：2026-06-23
+> 更新日期：2026-06-29
 > 用途：看板中英双语切换（`_i18n.py` 的 `t(zh, en)`）的**英文口径单一来源**。
 > 所有页面 `t()` 的英文一律引用此表，避免同词多译。生产版与 Demo 仓共用同一口径。
 
@@ -9,7 +9,7 @@
 | 中文 | English |
 |---|---|
 | Amazon 类目机会评分系统 | Amazon Category Opportunity Scorer |
-| 基于 BS / NR / MS 三类榜单 · 多维评分 + 策略推荐 + 行动指引 | Powered by BS / NR / MS rankings · Multi-factor scoring + strategy + playbook |
+| 基于 BS / NR / MS 三类榜单 · 多维评分 + 优先级分档 + 行动指引 | Powered by BS / NR / MS rankings · Multi-factor scoring + priority tiers + playbook |
 | 类目详情 | Category Detail |
 | 品牌竞争 | Brand Competition |
 | 跨榜联动 | Cross-List Linkage |
@@ -50,23 +50,44 @@
 
 | 中文 | English |
 |---|---|
-| 市场规模 | Market Size |
+| 市场吸引力 | Market Attractiveness |
 | 开放度 | Openness |
 | 新品空间 | New-Product Room |
 | 动能 | Momentum |
 | 稳定性 | Stability |
-| 等级（Tier） | Tier |
-| 业务类型（Archetype） | Archetype |
-| 策略建议（Strategy） | Strategy |
+| 综合机会分 | Opportunity Score |
+| 优先级类型（Overall Rating） | Priority Tier (Overall Rating) |
 
-## 类目动能 4 象限
+## 优先级类型（5 档，综合分百分位）
 
 | 中文 | English |
 |---|---|
-| 新兴上升 | Emerging |
-| 稳态成熟 | Mature-Stable |
-| 头部大盘 | Established-Heavy |
-| 老品沉淀 | Long-Tail Legacy |
+| 高潜机会类目 | High-potential |
+| 较高机会类目 | Higher |
+| 中性观察类目 | Balanced |
+| 谨慎评估类目 | Watch |
+| 暂不考虑类目 | Skip |
+
+## 机会信号（百分位，仅 3 维参与）
+
+> 仅「市场吸引力 / 开放度 / 结构稳定」三维参与；动能（方向歧义）、新品空间（数据稀疏）不打信号。
+> 维度分 ≥P75 → 优势信号；≤P25 → 约束信号。
+
+| 中文 | English |
+|---|---|
+| 优势信号 / 约束信号 | Strength signal / Constraint signal |
+| 需求居前 / 需求居后 | Top-quartile demand / Bottom-quartile demand |
+| 市场开放 / 品牌壁垒 | Open Market / Brand Barrier |
+| 波动较小 / 波动较大 | Low volatility / High volatility |
+
+## 类目象限（体量 × 增速）
+
+| 中文 | English |
+|---|---|
+| 体量（需求存量指数） | Size (Demand Stock) |
+| 增速（加速度＝增量/存量） | Growth speed (Increment/Stock) |
+| 多 / 少（体量轴） | Many / Few |
+| 快 / 慢（增速轴） | Fast / Slow |
 
 ## 行动指引模块
 
@@ -80,30 +101,8 @@
 | 评论缺口 | Review Gap |
 | 评分百分位 | Rating Percentile |
 
-## Archetype（13 业务类型，PLAYBOOK keys）
-
-| 中文 | English |
-|---|---|
-| 成熟优质市场 | Mature Premium Market |
-| 成长蓝海 | Growth Blue Ocean |
-| 新兴机会 | Emerging Opportunity |
-| 高成长高波动 | High-Growth High-Volatility |
-| 高热红海 | Hot Red Ocean |
-| 新品潜力区 | New-Product Potential |
-| 稳定现金流市场 | Steady Cash-Flow Market |
-| 高门槛利基 | High-Barrier Niche |
-| 稳态老品市场 | Steady Legacy Market |
-| 大盘冷门 | Large-but-Cold Market |
-| 低效开放市场 | Inefficient Open Market |
-| 冷门封闭 | Cold & Closed |
-| 待诊断 | Needs Diagnosis |
-
-## Tier 策略组（archetype 分组）
-
-| 中文 | English |
-|---|---|
-| 最理想类目 / 优质机会 / 早期机会 | Ideal / Strong Opportunity / Early Opportunity |
-| 优选 / 隐形机会 / 竞争拥挤 / 观察 / 不建议 | Top Pick / Hidden Gem / Crowded / Watch / Avoid |
+> 注：旧的「13 业务类型（Archetype）」与「Top Pick / Hidden Gem / Crowded / Watch / Avoid」策略组
+> 已废弃，统一改为上方「5 档优先级类型 + 机会信号」框架（口径见主项目指标解释 §4.4 / §4.5）。
 
 ## 通用 UI
 

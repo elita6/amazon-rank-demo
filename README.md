@@ -15,8 +15,8 @@ Turns Amazon category selection from gut-feel into an auditable, data-driven wor
 - Crawls BS / NR / MS best-seller boards (700+ pages snapshot)
 - Parses to SQLite (~70K ASIN-day records, ~20 categories, 5K+ brands)
 - Scores 5 dimensions → composite opportunity score
-- Diagnoses 13 business archetypes → maps to 5 strategies
-- Renders 6-page interactive dashboard + action playbooks
+- Ranks categories into 5 priority tiers + emits per-category signals
+- Renders interactive dashboard + action playbooks
 
 ## Demo limitations
 
@@ -26,21 +26,25 @@ Turns Amazon category selection from gut-feel into an auditable, data-driven wor
 | Brands | 5K+ real names | `Brand_001` ~ `Brand_N` |
 | ASINs | 15K+ real B0XXXXXXXX | `DEMO00001` ~ `DEMO0XXXX` |
 | Price / review | actual values | ±5% noise |
-| Archetype playbooks | 13 complete (4 actions each) | 2 disclosed, 11 listed only |
-| Dashboard pages | 6 (Category / Brand / ASIN flow / Cross-board / Scoring / Action) | 3 (Category / Scoring / Action) |
+| Action playbooks | Full per-tier + per-signal guidance | Structure disclosed, samples only |
+| Dashboard pages | 6 (Category / Brand / ASIN flow / Cross-board / Scoring / Action) | 5 (Category / Brand / Cross-board / Scoring / Action) |
 | Methodology docs | 4 docs (~3K lines) | Summary on landing page |
 
 ## Methodology core
 
-**5 scoring dimensions**:
-Market Size · Openness · New Product · Momentum · Stability
+**5 scoring dimensions** → composite opportunity score (0–1):
+Market Attractiveness · Openness · New Product · Momentum · Stability
 
 **Dual-layer weighting**:
-- Layer 1 (within-dimension): Entropy weights — data-driven
-- Layer 2 (across-dimension): Business fixed weights — judgment-anchored
+- Layer 1 (within-dimension): fixed weights per indicator
+- Layer 2 (across-dimension): business fixed weights (0.25 / 0.25 / 0.20 / 0.15 / 0.15)
 
-**13 archetypes** → **5 strategies**:
-Top Pick / Hidden Gem / Crowded / Watch / Avoid
+**5 priority tiers** (composite-score percentiles):
+High-potential / Higher / Balanced / Watch / Skip
+
+**Category signals** (per-dimension percentiles, Strength ≥P75 / Constraint ≤P25) — 6 signals over 3 dimensions:
+Top-quartile / Bottom-quartile demand · Open Market / Brand Barrier · Low / High volatility.
+Momentum (directionally ambiguous) and New Product (sparse) are scored but excluded from signals.
 
 ## Tech stack
 

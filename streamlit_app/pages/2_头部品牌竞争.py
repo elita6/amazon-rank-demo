@@ -1,10 +1,14 @@
 # streamlit_app/pages/2_头部品牌竞争.py
-# 更新日期：2026-06-28
+# 更新日期：2026-06-29
 # 用途：头部品牌竞争（Demo 版，对齐生产 v2）— 决策3。
 #       核心 = 集中度 2×2（坑位集中度 × 需求集中度，CR3 双基准，归一化品牌）。
 # 启动命令：streamlit run streamlit_app/产品概览.py
 # 与生产 v2 差异：数据源 data/amazon.db → data/*.csv（connect_demo）；类目/品牌已匿名化。
 # 主要改动：
+#   - 2026-06-29（同步生产 v2 文案）：热力图标题「各类目集中度」→「各类目BS集中度」；
+#       Treemap 标题改「单类目BS Top品牌ASIN占比」；散点解读由 5 条逐项罗列合并为 2 条
+#       （三项集中度同向，最集中/最分散用组合排名 shelf+demand+品牌密度 动态算；去掉「同向程度%」
+#       等术语与右上/左下表述）。最集中/最分散类目按 demo 合成数据动态算，不写死真实类目名。
 #   - 2026-06-28：从生产 v2 pages/1_品牌竞争.py 移植（页名「品牌竞争」→「头部品牌竞争」；
 #       CR3 双基准；热力图 + Top3 散点并排；Treemap 单类目下钻；全图 insight_box 数据驱动解读）
 
@@ -116,14 +120,12 @@ fig_h.update_layout(height=660, margin=dict(l=8, r=8, t=24, b=8),
                     yaxis=dict(autorange="reversed", automargin=True))
 fig_h.update_xaxes(side="top", tickfont=dict(size=11))
 
-# 解读占位数值（品牌密度 / Top3品牌份额(按ASIN) / 评论占比 列前 2-3 名）——热力图+散点合并解读用
-def _top_pct(col, k=3):
-    rows = order.nlargest(k, col)
-    return "、".join(f"<b>{r['category']}</b> {r[col]*100:.0f}%" for _, r in rows.iterrows())
-_sh_lo = order.nsmallest(2, "shelf")
-_lo_s = "、".join(f"<b>{r['category']}</b> {r['shelf']*100:.0f}%" for _, r in _sh_lo.iterrows())
-_apb3 = order.nlargest(3, "asin_per_brand")
-_apb_s = "、".join(f"<b>{r['category']}</b> {r['asin_per_brand']:.1f}" for _, r in _apb3.iterrows())
+# 三项集中度（Top3份额/评论占比/品牌密度）合并解读取数：用组合排名给"最集中/最分散"。
+#   三者实测两两正相关、相对排名稳健，故合起来一起说、不逐条罗列；解读文案不放术语。
+_conc = (df_cr["shelf"].rank() + df_cr["demand"].rank() + df_cr["asin_per_brand"].rank())
+# demo 仅 5 个类目：取前2/后2，避免 nlargest(3)+nsmallest(3) 重叠（3+3>5 中间类目会两边都出现）
+_most = "、".join(f"<b>{c}</b>" for c in df_cr.loc[_conc.nlargest(2).index, "category"])
+_least = "、".join(f"<b>{c}</b>" for c in df_cr.loc[_conc.nsmallest(2).index, "category"])
 
 # Top3 散点
 fig = px.scatter(
@@ -144,26 +146,17 @@ fig.update_layout(xaxis=dict(range=xr, tickformat=".0%"),
                   showlegend=False, margin=dict(l=10, r=10, t=30, b=40))
 _n = len(df_cr)
 _above = int((df_cr["demand"] > df_cr["shelf"]).sum())
-_rho = df_cr["shelf"].rank().corr(df_cr["demand"].rank())
-_tr = df_cr.loc[(df_cr["shelf"] + df_cr["demand"]).idxmax()]   # 右上：两项都高
-_bl = df_cr.loc[(df_cr["shelf"] + df_cr["demand"]).idxmin()]   # 左下：两项都低
 _insight_items = [
-    t(f"<b>Top3品牌份额(按ASIN)</b>最高的是 {_top_pct('shelf')}；最分散的 {_lo_s}——各类目头部 3 品牌占据的 ASIN 份额差距很大。",
-      f"<b>Top3 share (by ASIN)</b> is highest in {_top_pct('shelf')}; most fragmented {_lo_s}—wide gap in the ASIN share held by the top 3 brands across categories."),
-    t(f"<b>评论占比</b>最高的是 {_top_pct('demand')}——这几个类目的评论高度集中在头部 3 品牌手里。",
-      f"<b>Review share</b> is highest in {_top_pct('demand')}—reviews here are heavily concentrated in the top 3 brands."),
-    t(f"<b>品牌密度</b>（单品牌平均铺几款 ASIN）最高的是 {_apb_s}——这几个类目里头部品牌靠多个 SKU 占住榜单。",
-      f"<b>Brand density</b> (ASINs per brand) is highest in {_apb_s}—here head brands hold the list with many SKUs each."),
-    t(f"{_above}/{_n} 个类目<b>评论占比 > Top3品牌份额(按ASIN)</b>，且两者正相关（同向程度 {_rho:.0%}）：头部 3 品牌拿到的评论普遍比其 ASIN 份额还多，且份额越集中、评论通常也越集中。",
-      f"{_above}/{_n} categories have <b>review share > Top3 share (by ASIN)</b>, and the two are positively correlated (rank agreement {_rho:.0%}): the top 3 brands' review share generally exceeds their ASIN share, and the more concentrated the share, the more concentrated the reviews."),
-    t(f"右上角 <b>{_tr['category']}</b> 两项都最高、头部品牌最强势；左下角 <b>{_bl['category']}</b> 两项都最低、竞争最分散。",
-      f"Top-right <b>{_tr['category']}</b> is highest on both—head brands dominate; bottom-left <b>{_bl['category']}</b> is lowest on both—the most fragmented."),
+    t(f"<b>BS榜三项集中度（Top3 ASIN 份额 / 评论占比 / 品牌密度）基本同向</b>，头部 3 品牌ASIN数量占比越多的类目，评论通常也越集中，最集中类目：{_most}；最分散类目：{_least}。",
+      f"<b>The three BS concentration metrics (Top3 ASIN share / review share / brand density) move together</b>: categories where the top 3 brands hold a larger ASIN share usually have more concentrated reviews too. Most concentrated: {_most}; most fragmented: {_least}."),
+    t(f"{_above}/{_n} 个类目<b>评论占比 > Top3 ASIN 份额</b>——头部 3 品牌拿到的评论比其坑位份额还多：货架集中之外，需求更向头部倾斜。",
+      f"{_above}/{_n} categories have <b>review share > Top3 ASIN share</b>—the top 3 brands' reviews exceed their shelf share: beyond shelf concentration, demand leans even further toward the head."),
 ]
 
 # 并排：左 热力(窄) / 右 散点(宽)
 _hcol, _scol = st.columns([5, 6])
 with _hcol:
-    chart_title(t("各类目集中度", "Concentration by Category"))
+    chart_title(t("各类目BS集中度", "BS Concentration by Category"))
     st.plotly_chart(fig_h, width="stretch")
     st.markdown(
         "<div style='font-size:0.70rem; color:#6b7280; line-height:1.7;'>"
@@ -184,8 +177,8 @@ with _scol:
 st.divider()
 
 # ---------- Treemap 单类目下钻（复用原页样式）----------
-chart_title(t("Treemap：单类目内 Top15 品牌的 ASIN 占比（下钻）",
-              "Treemap: ASIN share of Top 15 brands within a category (drill-down)"))
+chart_title(t("单类目BS Top品牌ASIN占比",
+              "Single-category BS top brands' ASIN share"))
 cats_sorted = df_cr.sort_values("demand", ascending=False)["category"].tolist()
 sel = st.selectbox(t("选择类目", "Select category"), options=cats_sorted,
                    format_func=lambda c: CAT_SHORT.get(c, c), label_visibility="collapsed")

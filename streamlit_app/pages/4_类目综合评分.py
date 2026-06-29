@@ -1,5 +1,5 @@
 # streamlit_app/pages/4_类目综合评分.py
-# 更新日期：2026-06-28
+# 更新日期：2026-06-29
 # 用途：类目综合评分（Demo 版，对齐生产 v2 布局）— 横向比较页。
 #       上：优先级类型分布树状图（全宽）；下：左 Top10 机会类目横向条形 + 右 Top3 五维雷达。
 #       侧边栏 4 个权重预设 + 5 维滑块，动态重算综合分 / 优先级类型(Tier) / Flag。
@@ -9,6 +9,9 @@
 #   - 默认权重：生产 v2 从 config/scoring_config.yaml 读取；Demo 无 config 目录，直接内联
 #     DEFAULT_WEIGHTS = A0.25 / C0.25 / N0.20 / M0.15 / T0.15（与 v2 dimension_weights 一致）
 # 主要改动：
+#   - 2026-06-29（文案同步生产 v2）：各维度「衡量什么」改为问句式——市场吸引力=有没有市场？/
+#       市场开放度=能不能进入？/新品空间=新品能不能成长？/增长动能=有没有正在上升的产品？/
+#       结构稳定=市场波动性大不大？（中英同步）。不动计算口径。
 #   - 2026-06-28：从生产 v2 pages/4_类目综合评分.py 移植（树状图 + Top10 横向条形 + Top3 雷达；
 #       各项评分说明 expander；权重预设 + 滑块动态重算）
 
@@ -200,15 +203,15 @@ with st.expander(t("ℹ️ 各项评分衡量什么", "ℹ️ What each score me
         + t("基于市场吸引力、市场开放度、新品空间、增长动能、结构稳定 5 个维度构建评分模型，用来给类目排优先级，分越高越值得优先考虑。",
             "a scoring model built on five dimensions (market attractiveness, openness, new-product room, momentum, stability) to rank category priority; higher means more worth prioritizing.")
         + "<br><b>" + t("市场吸引力", "Market Attractiveness") + "</b> — "
-        + t("这个类目的需求强度够不够大？", "is this category's demand strong enough?")
+        + t("有没有市场？", "Is there a market?")
         + "<br><b>" + t("市场开放度", "Openness") + "</b> — "
-        + t("进入的难易（头部封不封锁）？", "how easy is it to enter (do the head brands lock it down)?")
+        + t("能不能进入？", "Can you get in?")
         + "<br><b>" + t("新品空间", "New-Product Room") + "</b> — "
-        + t("新品有没有冲进畅销的通道？", "is there a path for new products to break into the bestseller list?")
+        + t("新品能不能成长？", "Can new products grow?")
         + "<br><b>" + t("增长动能", "Momentum") + "</b> — "
-        + t("有没有产品在快速上升、有没有爆发？", "are products rising fast, are there breakouts?")
+        + t("有没有正在上升的产品？", "Are products on the rise?")
         + "<br><b>" + t("结构稳定", "Stability") + "</b> — "
-        + t("结构稳不稳、能不能持续？", "is the structure steady and sustainable?")
+        + t("市场波动性大不大？", "How volatile is the market?")
         + "</div>",
         unsafe_allow_html=True,
     )

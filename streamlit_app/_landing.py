@@ -9,6 +9,10 @@
 #   - 2026-06-28：对齐生产 v2 — 6 页 → 5 页（「头部品牌竞争」改名 + 删除独立「ASIN 流动性」页，
 #                 黏性表并入「跨榜联动」）；方法论卡片 archetype/strategy → Opportunity Signals +
 #                 5 档优先级类型；页面描述同步 v2 新模块。
+#   - 2026-06-29：对齐指标解释 §4.5 — 机会信号改为「市场吸引力/开放度/结构稳定」三维
+#                 （动能/新品空间不参与信号），信号名 需求居前·居后 / 市场开放·品牌壁垒 /
+#                 波动较小·较大；5 档英文 Top/High → High-potential/Higher；
+#                 头部品牌竞争描述精简为「CR3 集中度+ 单类目品牌下钻」。
 
 import sys
 from pathlib import Path
@@ -36,8 +40,8 @@ PAGES = [
         "n": 2,
         "icon": "🏆",
         "title": t("头部品牌竞争", "Head-Brand Competition"),
-        "desc": t("CR3 双基准集中度（坑位 × 需求）+ 单类目品牌 Treemap 下钻",
-                  "CR3 dual-basis concentration (shelf × demand) + per-category brand Treemap drill-down"),
+        "desc": t("CR3 集中度+ 单类目品牌下钻",
+                  "CR3 concentration + single-category brand drill-down"),
         "demo": True,
         "url": "/brand-competition",
     },
@@ -190,10 +194,10 @@ with m1:
         + t("评分系统", "Scoring System") + "</div>"
         "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
         + t(
-            "<b>5 维</b>：市场规模 / 开放度 / 新品空间 / 增长动能 / 结构稳定<br><br>"
+            "<b>5 维</b>：市场吸引力 / 开放度 / 新品空间 / 增长动能 / 结构稳定<br><br>"
             "<b>双层加权</b>：数据驱动+业务调整<br><br>"
             "<b>模型指标</b>：筛选 → 候选 → selected",
-            "<b>5 factors</b>: Market Size / Openness / New-Product Room / Momentum / Stability<br><br>"
+            "<b>5 factors</b>: Market Attractiveness / Openness / New-Product Room / Momentum / Stability<br><br>"
             "<b>Two-layer weighting</b>: data-driven + business adjustment<br><br>"
             "<b>Model metrics</b>: screened &rarr; candidate &rarr; selected",
         )
@@ -209,12 +213,15 @@ with m2:
         + t("Opportunity Signals", "Opportunity Signals") + "</div>"
         "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
         + t(
-            "对 A / C / M / T 四维做<b>百分位</b>切线<br><br>"
-            "<b>优势信号</b>（≥P75）：需求强劲 / 市场开放 / 增长强劲 / 结构稳定<br><br>"
-            "<b>约束信号</b>（≤P25）：需求疲弱 / 品牌壁垒 / 增长乏力 / 结构不稳",
-            "Percentile cutoffs over the A / C / M / T factors<br><br>"
-            "<b>Strengths</b> (&ge;P75): Strong Demand / Open Market / High Momentum / Stable Structure<br><br>"
-            "<b>Constraints</b> (&le;P25): Weak Demand / Brand Barrier / Weak Momentum / Unstable Structure",
+            "对 市场吸引力 / 开放度 / 结构稳定 三维做<b>百分位</b>切线"
+            "（动能方向歧义、新品空间数据稀疏，<b>不参与信号</b>）<br><br>"
+            "<b>优势信号</b>（≥P75）：需求居前 / 市场开放 / 波动较小<br><br>"
+            "<b>约束信号</b>（≤P25）：需求居后 / 品牌壁垒 / 波动较大",
+            "Percentile cutoffs over Market Attractiveness / Openness / Stability "
+            "(Momentum is directionally ambiguous and New Product is sparse, so both are "
+            "<b>excluded from signals</b>)<br><br>"
+            "<b>Strengths</b> (&ge;P75): Top-quartile demand / Open Market / Low volatility<br><br>"
+            "<b>Constraints</b> (&le;P25): Bottom-quartile demand / Brand Barrier / High volatility",
         )
         + "</div></div>",
         unsafe_allow_html=True,
@@ -235,8 +242,8 @@ with m3:
             "<b>谨慎评估</b> — 谨慎权衡<br>"
             "<b>暂不考虑</b> — 暂缓<br><br>",
             "5 tiers by composite-score <b>percentile</b>:<br>"
-            "<b>Top</b> — prioritize<br>"
-            "<b>High</b> — strong focus<br>"
+            "<b>High-potential</b> — prioritize<br>"
+            "<b>Higher</b> — strong focus<br>"
             "<b>Balanced</b> — monitor<br>"
             "<b>Watch</b> — weigh carefully<br>"
             "<b>Skip</b> — defer<br><br>",

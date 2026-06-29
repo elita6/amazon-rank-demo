@@ -1,11 +1,13 @@
 # streamlit_app/pages/3_跨榜联动.py
-# 更新日期：2026-06-28
+# 更新日期：2026-06-29
 # 用途：BS / NR / MS 三榜联动分析（Demo 版，对齐生产 v2）。
 #       两视角：① ASIN流动性（类目黏性 & 新品活跃表，含 BS 在榜率/满榜率/新增比例、
 #       NR 流动率/→BS渗透、MS →BS渗透）；② MS爆发强度（排名提升率排行 + 每日曲线 + Top20）。
 # 启动命令：streamlit run streamlit_app/产品概览.py
 # 与生产 v2 差异：数据源 data/amazon.db → data/*.csv（connect_demo）；类目/品牌已匿名化。
 # 主要改动：
+#   - 2026-06-29（同步生产 v2 文案）：BS 在榜率注解后半句「越高说明典型 ASIN 几乎天天在榜、
+#       榜单越固化」→「越高说明头部产品生命周期越长」（中英同步，口径不动）。
 #   - 2026-06-28：从生产 v2 pages/2_跨榜联动.py 移植——独立「ASIN流动性」页删除，其
 #       类目黏性表并入本页并扩列（在榜率/满榜率口径走 _aggregate；渗透率 nr_to_bs_penetration）。
 
@@ -534,8 +536,8 @@ elif view == "liquidity":
 
         st.markdown(
             "<div style='font-size:0.68rem; color:#6b7280; line-height:1.7; margin-top:6px;'>"
-            + t("* BS 在榜率：该类目 BS ASIN 平均在榜天数 / 采集天数；越高说明典型 ASIN 几乎天天在榜、榜单越固化",
-                "* BS on-list %: avg BS ASIN days-on-list / sampled days; higher = a typical ASIN is on almost every day (more fixed)")
+            + t("* BS 在榜率：该类目 BS ASIN 平均在榜天数 / 采集天数；越高说明头部产品生命周期越长",
+                "* BS on-list %: avg BS ASIN days-on-list / sampled days; higher = the longer the head products' lifecycle")
             + "<br>"
             + t("* BS 满榜率：整段采集期天天在榜的常驻款占比；高在榜率 + 高满榜率 = 少数款霸榜，高在榜率 + 低满榜率 = 广泛轮动",
                 "* BS full-list %: share always on every day; high on-list + high full-list = a few dominate, high on-list + low full-list = broad rotation")

@@ -10,6 +10,12 @@
 # 主要改动：
 #   - 2026-06-28：从生产 v2 类目详情.py 移植（去「三榜合并」默认 BS；价格/评论 winsor_mean；
 #       需求增量/存量指数；箱线图不去极值；品牌归一化去重；象限图；全图 insight_box 数据驱动解读）
+#   - 2026-06-29：对齐生产 v2 本轮改动——
+#       1) 汇总表「平均价格」前补「平均累计评论数」列（=最新一天快照 winsor 均值 latest_review_repr）；
+#       2) 表注改「需求累积量指数=平均累计评论数×平均价格（评论按最新值）」+ 加「需求指标仅作大致参考」行；
+#       3) 箱型图「评论数分布」→「累计评论数分布」，数据改每类目最新一天快照（与平均累计评论同口径），价格仍全窗口；
+#       4) 象限图换轴 X=需求存量(体量)/Y=加速度(增量/存量)，去四象限名，中位虚线端点写方向词（快/慢/小/大），
+#          解读改纯位置描述（体量多·增速快 等），图下加「存量/增速为近似代理、非真实销量」注。
 
 import sys
 from pathlib import Path
@@ -23,7 +29,8 @@ sys.path.insert(0, str(ROOT / "streamlit_app"))
 from _styles import page_title, chart_title, conclusion, chart_spacer, insight_box
 from _i18n import t
 from _aggregate import (winsor_mean, demand_increment_index, demand_stock_index,
-                        distribution_insights, crosslink_neg, fmt_compact)
+                        latest_review_repr, distribution_insights, crosslink_neg,
+                        fmt_compact)
 from _brands import normalize_brand
 from _demo_data import connect_demo
 
@@ -213,6 +220,12 @@ with st.container(border=True):
         summary[["category", "n_subcategories"]], on="category", how="left",
     )
 
+    # 平均累计评论数 = 需求存量指数的评论因子：取该类目最新一天快照、缩尾后求平均
+    #   （累计型变量取最新值，非跨天平均；与下方注释「评论数按最新值取值」一致）
+    agg_view["review_repr"] = agg_view["category"].map(
+        asin_v.groupby("category").apply(latest_review_repr).round(0)
+    )
+
     # 需求增量指数 / 需求存量指数：固定 BS 口径，仅 BS 视图显示
     if is_bs:
         agg_view["demand_increment"] = agg_view["category"].map(increment_by_cat)
@@ -224,7 +237,7 @@ with st.container(border=True):
 
     ordered_cols = ["category", "records", "days", "unique_asin", "unique_brand",
                     "n_subcategories", "demand_increment", "demand_stock",
-                    "price_repr", "rate_mean", "has_video_pct"]
+                    "review_repr", "price_repr", "rate_mean", "has_video_pct"]
     ordered_cols = [c for c in ordered_cols if c in agg_view.columns]
     display = agg_view[ordered_cols].copy()
 
@@ -236,6 +249,7 @@ with st.container(border=True):
     COL_SUBCAT        = t("子类数", "Subcategories")
     COL_INCREMENT     = t("需求增量指数(月均)", "Demand Increment (monthly)")
     COL_STOCK         = t("需求累积量指数", "Demand Stock")
+    COL_REVIEW_REPR   = t("平均累计评论数", "Avg cumulative reviews")
     COL_PRICE_REPR    = t("平均价格", "Avg price")
     COL_RATE_MEAN     = t("平均评分", "Avg rating")
     COL_HAS_VIDEO     = t("有视频%", "Video %")
@@ -249,6 +263,7 @@ with st.container(border=True):
         "n_subcategories":    COL_SUBCAT,
         "demand_increment":   COL_INCREMENT,
         "demand_stock":       COL_STOCK,
+        "review_repr":        COL_REVIEW_REPR,
         "price_repr":         COL_PRICE_REPR,
         "rate_mean":          COL_RATE_MEAN,
         "has_video_pct":      COL_HAS_VIDEO,
@@ -284,6 +299,17 @@ with st.container(border=True):
         column_config[COL_STOCK] = st.column_config.ProgressColumn(
             format="%d", min_value=0, max_value=float(m) if m else 1,
         )
+    if COL_REVIEW_REPR in display.columns:
+        m = display[COL_REVIEW_REPR].max()
+        column_config[COL_REVIEW_REPR] = st.column_config.ProgressColumn(
+            format="%d", min_value=0, max_value=float(m) if m else 1,
+            help=t(
+                "该类目最新一天快照的累计评论数，P5/P95 缩尾后求平均（累计型取最新值，非跨天平均）。"
+                "它 × 平均价格 = 需求累积量指数。",
+                "Latest-day snapshot cumulative reviews, winsorized at P5/P95 then averaged "
+                "(cumulative variable taken at its latest value). This × avg price = Demand Stock.",
+            ),
+        )
     if COL_PRICE_REPR in display.columns:
         m = display[COL_PRICE_REPR].max()
         column_config[COL_PRICE_REPR] = st.column_config.ProgressColumn(
@@ -304,10 +330,12 @@ with st.container(border=True):
     note = t(
         "• 注：极值按 P5/P95 缩尾处理<br>"
         "• 需求增量指数(月均)：评论增量 × 平均价格 / 统计天数 × 30<br>"
-        "• 需求累积量指数：最新累计评论数 × 平均价格",
+        "• 需求累积量指数：平均累计评论数 × 平均价格（其中评论数按最新值取值）<br>"
+        "• 需求指标仅作大致参考、用于跨类目相对排序，非真实销量/GMV",
         "• Note: extremes winsorized at P5/P95<br>"
         "• Demand Increment (monthly): review increment × avg price / observed days × 30<br>"
-        "• Demand Stock: latest cumulative reviews × avg price",
+        "• Demand Stock: avg cumulative reviews × avg price (reviews taken at their latest value)<br>"
+        "• Demand metrics are a rough reference for cross-category relative ranking only — not real sales/GMV",
     )
     if not is_bs:
         note += t("<br>（NR/MS 视图下需求增量/累积量指数隐藏，为固定 BS 口径）",
@@ -419,14 +447,19 @@ with st.container(border=True):
 
         chart_spacer()
 
-        chart_title(f"2. {t('评论数分布', 'Review Count Distribution')}{suffix_bd}")
-        _ri = distribution_insights(bd_v, "category", "review_count", id_col="asin")
-        fig = px.box(bd_v.dropna(subset=["review_count"]),
+        chart_title(f"2. {t('累计评论数分布', 'Cumulative Review Count Distribution')}{suffix_bd}")
+        # 累计评论是累计型变量：取每类目「最新一天」快照（每 ASIN 一个当前值），与汇总表
+        #   「平均累计评论数」同口径——避免全窗口按在榜天数重复计数/加权同一 ASIN（伪重复）。
+        _bd_rev = bd_v.dropna(subset=["review_count"])
+        _bd_rev = _bd_rev[_bd_rev["date"] ==
+                          _bd_rev.groupby("category")["date"].transform("max")]
+        _ri = distribution_insights(_bd_rev, "category", "review_count", id_col="asin")
+        fig = px.box(_bd_rev,
                      x="category", y="review_count", height=380,
                      points=False, color="category")
         fig.update_traces(hovertemplate="%{x}<br>%{y:.0f}<extra></extra>")
         fig.update_layout(xaxis_tickangle=-30, xaxis_title=None,
-                          yaxis_title=t("评论数", "Review count"), showlegend=False,
+                          yaxis_title=t("累计评论数", "Cumulative review count"), showlegend=False,
                           margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, width="stretch")
 
@@ -453,26 +486,30 @@ with st.container(border=True):
             insight_box(_items)
 
         st.caption(t(
-            "注：分布图展示完整数据（不去极值），故纵轴会被头部长尾拉伸；汇总表的均价/均评论已去极值。",
-            "Note: distributions show the full data (no winsorizing), so the y-axis stretches with the "
-            "head/long tail; the summary table's mean price/reviews are already winsorized.",
+            "注：箱线图展示原始分布（不去极值）。价格用全窗口全部观测；累计评论取每类目最新一天快照"
+            "（每 ASIN 一个当前值），与汇总表「平均累计评论数」同口径。",
+            "Note: box plots show the raw distribution (no winsorizing). Price uses all observations across "
+            "the full window; cumulative reviews use each category's latest-day snapshot (one current value "
+            "per ASIN), matching the summary table's Avg cumulative reviews.",
         ))
 
 
 # ----- 交叉分析 -----
 with st.container(border=True):
-    st.markdown(f"**● {t('交叉分析', 'Cross Analysis')}**")
-    st.caption(t("注：基于 BS 榜口径（与页面榜单选择器无关）",
-                 "Note: based on the BS list only (independent of the page list selector)"))
-
     # ============================================================
-    # 类目象限图（需求增量 × 需求存量 4 象限 — 固定 BS 口径）
+    # 类目象限图（需求存量[体量] × 加速度[增速] 4 象限 — 固定 BS 口径）
+    #   旧版用 增量×存量，两轴秩相关高（伪二维、信息冗余）；改为 存量×加速度后两轴近正交：
+    #   X=体量大小、Y=增速快慢，各答一个问题。加速度=增量/存量=月增评论/累计评论
+    #   （价格约掉、体量中性）。不设象限名；方向词写在两条轴的两端：
+    #   X 轴(体量) 左小右大、Y 轴(增速) 下慢上快。
     # ============================================================
     chart_title(t("类目象限图（固定BS口径）", "Category Quadrant Chart (fixed BS basis)"))
     quad = pd.DataFrame({"category": main_cats})
-    quad["monthly_M"] = quad["category"].map(increment_by_cat)   # X = 需求增量(近期)
-    quad["heat"] = quad["category"].map(stock_by_cat)            # Y = 需求存量(历史)
-    quad = quad.dropna(subset=["monthly_M", "heat"])
+    quad["inc"] = quad["category"].map(increment_by_cat)
+    quad["stk"] = quad["category"].map(stock_by_cat)
+    quad = quad.dropna(subset=["inc", "stk"])
+    quad["size"] = quad["stk"]                   # X = 体量（需求存量指数）
+    quad["speed"] = quad["inc"] / quad["stk"]    # Y = 增速（加速度 = 增量/存量）
 
     if not quad.empty:
         quad["类目短名"] = quad["category"].map(CAT_SHORT).fillna(quad["category"])
@@ -501,15 +538,15 @@ with st.container(border=True):
         text_positions = [TEXT_POS.get(cat, "top center") for cat in quad["category"]]
 
         fig = px.scatter(
-            quad, x="monthly_M", y="heat",
+            quad, x="size", y="speed",
             text="类目短名",
             hover_name="category",
-            hover_data={"monthly_M": ":.0f",
-                        "heat": ":.0f",
+            hover_data={"size": ":.0f",
+                        "speed": ":.4f",
                         "类目短名": False},
             height=520,
-            labels={"monthly_M": t("需求增量指数（近期需求）", "Demand Increment (recent)"),
-                    "heat": t("需求存量指数（历史累计需求）", "Demand Stock (historical)")},
+            labels={"size": t("需求存量指数（体量）", "Demand Stock (size)"),
+                    "speed": t("增速＝加速度（增量/存量）", "Growth speed = Increment/Stock")},
         )
         fig.update_traces(
             marker=dict(size=12, color="#a8cfee",
@@ -518,58 +555,89 @@ with st.container(border=True):
             textposition=text_positions,
             textfont=dict(size=10, color="#444"),
         )
-        mx = quad["monthly_M"].median()
-        my = quad["heat"].median()
+        mx = quad["size"].median()
+        my = quad["speed"].median()
         fig.add_vline(x=mx, line_dash="dash", line_color="gray")
         fig.add_hline(y=my, line_dash="dash", line_color="gray")
-        x_lo, x_hi = quad["monthly_M"].min(), quad["monthly_M"].max()
-        y_lo, y_hi = quad["heat"].min(), quad["heat"].max()
+        x_lo, x_hi = quad["size"].min(), quad["size"].max()
+        y_lo, y_hi = quad["speed"].min(), quad["speed"].max()
         x_range = [max(0, x_lo - (x_hi - x_lo) * 0.10), x_hi + (x_hi - x_lo) * 0.12]
         y_range = [max(0, y_lo - (y_hi - y_lo) * 0.10), y_hi + (y_hi - y_lo) * 0.15]
-        fig.add_annotation(xref="paper", yref="paper", x=0.99, y=1.0, yshift=14,
-                             text=f"<b>{t('头部大盘', 'Established-Heavy')}</b>", showarrow=False,
-                             font=dict(size=11, color="#c0392b"),
-                             xanchor="right", yanchor="bottom",
-                             bgcolor="rgba(0,0,0,0)", borderpad=3)
-        fig.add_annotation(xref="paper", yref="paper", x=0.01, y=1.0, yshift=14,
-                             text=f"<b>{t('稳态成熟', 'Mature-Stable')}</b>", showarrow=False,
-                             font=dict(size=11, color="#2980b9"),
-                             xanchor="left", yanchor="bottom",
-                             bgcolor="rgba(0,0,0,0)", borderpad=3)
-        fig.add_annotation(xref="paper", yref="paper", x=0.99, y=0.0, yshift=-14,
-                             text=f"<b>{t('新兴上升 ★', 'Emerging ★')}</b>", showarrow=False,
-                             font=dict(size=11, color="#27ae60"),
-                             xanchor="right", yanchor="top",
-                             bgcolor="rgba(0,0,0,0)",borderpad=3)
-        fig.add_annotation(xref="paper", yref="paper", x=0.01, y=0.0, yshift=-14,
-                             text=f"<b>{t('冷门小盘', 'Small & Cold')}</b>", showarrow=False,
-                             font=dict(size=11, color="#7f8c8d"),
-                             xanchor="left", yanchor="top",
-                             bgcolor="rgba(0,0,0,0)", borderpad=3)
+        # 方向词写在两条中位虚线（十字）的端点：
+        #   竖线(增速) 上端=快、下端=慢（x 对齐 mx）；横线(体量) 左端=小、右端=大（y 对齐 my）。
+        _df = dict(size=14, color="#555")
+        fig.add_annotation(xref="x", x=mx, yref="paper", y=1.0, yshift=16,
+                           text=f"<b>{t('快', 'Fast')}</b>", showarrow=False,
+                           font=_df, xanchor="center", yanchor="bottom")
+        fig.add_annotation(xref="x", x=mx, yref="paper", y=0.0, yshift=-16,
+                           text=f"<b>{t('慢', 'Slow')}</b>", showarrow=False,
+                           font=_df, xanchor="center", yanchor="top")
+        fig.add_annotation(xref="paper", x=0.0, xshift=-12, yref="y", y=my,
+                           text=f"<b>{t('小', 'Small')}</b>", showarrow=False,
+                           font=_df, xanchor="right", yanchor="middle")
+        fig.add_annotation(xref="paper", x=1.0, xshift=12, yref="y", y=my,
+                           text=f"<b>{t('大', 'Big')}</b>", showarrow=False,
+                           font=_df, xanchor="left", yanchor="middle")
         fig.update_layout(
             xaxis=dict(range=x_range),
             yaxis=dict(range=y_range),
-            margin=dict(l=10, r=10, t=50, b=50),
+            margin=dict(l=52, r=34, t=44, b=56),
         )
         st.plotly_chart(fig, width="stretch")
 
-        # 解读：与象限图同一份 quad 数据 + 同一条中位虚线（mx=增量中位, my=存量中位）划象限
-        def _names(d):
-            return "、".join(f"<b>{c}</b>" for c in d["category"].tolist())
-        _heavy = quad[(quad["monthly_M"] > mx) & (quad["heat"] > my)]   # 右上 头部大盘
-        _emerg = quad[(quad["monthly_M"] > mx) & (quad["heat"] <= my)]  # 右下 新兴上升
-        _cold = quad[(quad["monthly_M"] <= mx) & (quad["heat"] <= my)]  # 左下 冷门小盘
+        st.markdown(
+            "<div style='font-size: 0.70rem; color: #6b7280; line-height: 1.65; margin-top: 4px;'>"
+            + t(f"坐标轴=中位线（{len(quad)} 类目中间水平）",
+                f"Axes split at the median ({len(quad)} categories' midpoint)")
+            + "<br>"
+            + t("需求存量、增速是近似代理，非真实销量/GMV，仅做大致参考",
+                "Demand stock and growth speed are rough proxies, not real sales/GMV—rough reference only")
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+
+        # 解读：与象限图同一份 quad + 同一中位虚线（mx=体量中位, my=增速中位）划象限。
+        # 纯位置描述（体量 多/少 × 增速 快/慢）；剔除贴近中位线的类目（归属不稳），
+        # 按"离两条线都远"(角落代表性 = 两轴归一偏离的较小者)取前 k。
+        _xspan = (quad["size"].max() - quad["size"].min()) or 1
+        _yspan = (quad["speed"].max() - quad["speed"].min()) or 1
+        _NEAR = 0.08   # 距中位线 < 8% 轴跨度 视为"贴线"，不写进解读
+
+        def _typical(d, k=3):
+            if d.empty:
+                return ""
+            dd = d.assign(_dx=(d["size"] - mx).abs() / _xspan,
+                          _dy=(d["speed"] - my).abs() / _yspan)
+            dd = dd[(dd["_dx"] >= _NEAR) & (dd["_dy"] >= _NEAR)]   # 剔贴线
+            if dd.empty:
+                return ""
+            dd = dd.assign(_corner=dd[["_dx", "_dy"]].min(axis=1))  # 离两线都远=典型
+            dd = dd.sort_values("_corner", ascending=False)
+            return "、".join(f"<b>{c}</b>" for c in dd["category"].head(k).tolist())
+
+        _bigfast = quad[(quad["size"] > mx) & (quad["speed"] > my)]     # 右上 多·快
+        _bigslow = quad[(quad["size"] > mx) & (quad["speed"] <= my)]    # 右下 多·慢
+        _smallfast = quad[(quad["size"] <= mx) & (quad["speed"] > my)]  # 左上 少·快
+        _smallslow = quad[(quad["size"] <= mx) & (quad["speed"] <= my)] # 左下 少·慢
         _q = []
-        if not _heavy.empty:
+        _bf = _typical(_bigfast)
+        if _bf:
             _q.append(t(
-                f"「头部大盘」（历史与近期需求都在中位线以上）：{_names(_heavy)}。",
-                f"'Established-Heavy' (both historical and recent demand above the median lines): {_names(_heavy)}."))
-        if not _emerg.empty:
+                f"<b>体量多 · 增速快</b>（存量、增速都高于中位）：{_bf}。",
+                f"<b>Many · Fast</b> (both stock and growth speed above the medians): {_bf}."))
+        _sf = _typical(_smallfast)
+        if _sf:
             _q.append(t(
-                f"「新兴上升」（近期需求已过中位、历史盘子还偏小）：{_names(_emerg)}。",
-                f"'Emerging' (recent demand above median while the historical base is still small): {_names(_emerg)}."))
-        if not _cold.empty:
+                f"<b>体量少 · 增速快</b>（存量低于中位、增速高于中位）：{_sf}。",
+                f"<b>Few · Fast</b> (stock below median, growth speed above): {_sf}."))
+        _bs = _typical(_bigslow)
+        if _bs:
             _q.append(t(
-                f"「冷门小盘」（增量与存量都低于中位）：{_names(_cold)}。",
-                f"'Small & Cold' (both increment and stock below the median): {_names(_cold)}."))
+                f"<b>体量多 · 增速慢</b>（存量高于中位、增速低于中位）：{_bs}。",
+                f"<b>Many · Slow</b> (stock above median, growth speed below): {_bs}."))
+        _ss = _typical(_smallslow)
+        if _ss:
+            _q.append(t(
+                f"<b>体量少 · 增速慢</b>（存量、增速都低于中位）：{_ss}。",
+                f"<b>Few · Slow</b> (both stock and growth speed below the medians): {_ss}."))
         insight_box(_q)
