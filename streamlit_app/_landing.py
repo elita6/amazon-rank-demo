@@ -256,7 +256,6 @@ CHIPS = [
     ("Streamlit", "#FF4B4B"),
     ("Plotly", "#3F4F75"),
     ("BeautifulSoup", "#4B8BBE"),
-    ("Information Entropy", "#6b7280"),
     ("Pareto Optimization", "#6b7280"),
     ("MCDA", "#6b7280"),
 ]

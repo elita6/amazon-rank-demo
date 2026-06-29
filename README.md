@@ -49,7 +49,7 @@ Momentum (directionally ambiguous) and New Product (sparse) are scored but exclu
 ## Tech stack
 
 `Python` `Pandas` `NumPy` `SQLite` `Streamlit` `Plotly` `BeautifulSoup` ·
-Information entropy · Multi-Criteria Decision Analysis (MCDA) · Pareto optimization
+Multi-Criteria Decision Analysis (MCDA) · Pareto optimization
 
 ## Run locally
 
