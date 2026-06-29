@@ -248,7 +248,7 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
     agg = sdf.groupby("asin", sort=False).agg(
         prio=("prio", "min"),                     # 主信号（多信号取最高优先级）
         score=("score", "first"),                 # 已排序：first = 主信号里幅度最大
-        reason=("reason", lambda s: "\n".join(s)),   # 多信号合并理由：逐条换行展示
+        reason=("reason", lambda s: "<br>".join(s)),  # 多信号合并理由：逐条换行（HTML 表格渲染）
     )
     # 三信号「平衡」选取 top_n
     nr_idx = list(agg[agg["prio"] == 0].sort_values("score", ascending=False).index)
@@ -505,25 +505,49 @@ if top_df is None or top_df.empty:
     st.warning(t("窗口内没有符合三类上升信号的非头部 ASIN",
                  "No non-leader ASINs matched the three rising signals in this window"))
 else:
-    # 展示表：关注理由 + 基本信息（product_url 走 LinkColumn）
-    display = top_df[["reason", "brand", "asin", "price_low", "review_count", "rate", "product_url"]].copy()
+    # 展示表：关注理由「多信号逐条换行」需要单元格内换行，st.dataframe 不支持 →
+    #   改用 HTML 表格渲染（reason 已用 <br> 连接），并保留可点 Amazon 链接。
     col_reason = t("关注理由", "Why watch")
     col_brand = t("品牌", "Brand")
     col_price = t("价格 ($)", "Price ($)")
     col_reviews = t("评论数", "Reviews")
     col_rating = t("评分", "Rating")
     col_link = t("Amazon 链接", "Amazon Link")
-    display.columns = [col_reason, col_brand, "ASIN", col_price, col_reviews, col_rating, col_link]
-    st.dataframe(
-        display,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            col_reason:   st.column_config.TextColumn(width="large",
-                help=t("该 ASIN 入选的上升信号（可能多条）", "Rising signal(s) this ASIN matched")),
-            col_price:    st.column_config.NumberColumn(format="$%.2f"),
-            col_reviews:  st.column_config.NumberColumn(format="%d"),
-            col_rating:   st.column_config.NumberColumn(format="%.1f"),
-            col_link:     st.column_config.LinkColumn(display_text=t("🔗 打开", "🔗 Open")),
-        },
+    _open = t("打开", "Open")
+
+    _th = ("padding:8px 10px; text-align:left; font-weight:600; color:#374151; "
+           "border-bottom:2px solid #e5e7eb; white-space:nowrap;")
+    _td = "padding:8px 10px; border-bottom:1px solid #f1f5f9; vertical-align:top;"
+    _num = lambda v, f: (f.format(v) if pd.notna(v) else "—")
+    _rows = ""
+    for _, r in top_df.iterrows():
+        _url = r["product_url"] if pd.notna(r.get("product_url")) else ""
+        _link = (f"<a href='{_url}' target='_blank' style='color:#2563eb; text-decoration:none;'>🔗 {_open}</a>"
+                 if _url else "—")
+        _rows += (
+            "<tr>"
+            f"<td style='{_td} line-height:1.7;'>{r['reason']}</td>"
+            f"<td style='{_td} white-space:nowrap;'>{r['brand']}</td>"
+            f"<td style='{_td} white-space:nowrap; color:#6b7280;'>{r['asin']}</td>"
+            f"<td style='{_td} text-align:right; white-space:nowrap;'>{_num(r['price_low'], '${:.2f}')}</td>"
+            f"<td style='{_td} text-align:right;'>{_num(r['review_count'], '{:.0f}')}</td>"
+            f"<td style='{_td} text-align:right;'>{_num(r['rate'], '{:.1f}')}</td>"
+            f"<td style='{_td} white-space:nowrap;'>{_link}</td>"
+            "</tr>"
+        )
+    _html = (
+        "<div style='overflow-x:auto;'>"
+        "<table style='border-collapse:collapse; width:100%; font-size:0.88rem;'>"
+        "<thead><tr>"
+        f"<th style='{_th}'>{col_reason}</th>"
+        f"<th style='{_th}'>{col_brand}</th>"
+        f"<th style='{_th}'>ASIN</th>"
+        f"<th style='{_th} text-align:right;'>{col_price}</th>"
+        f"<th style='{_th} text-align:right;'>{col_reviews}</th>"
+        f"<th style='{_th} text-align:right;'>{col_rating}</th>"
+        f"<th style='{_th}'>{col_link}</th>"
+        "</tr></thead><tbody>"
+        + _rows +
+        "</tbody></table></div>"
     )
+    st.markdown(_html, unsafe_allow_html=True)
