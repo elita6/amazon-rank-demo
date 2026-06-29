@@ -248,7 +248,7 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
     agg = sdf.groupby("asin", sort=False).agg(
         prio=("prio", "min"),                     # 主信号（多信号取最高优先级）
         score=("score", "first"),                 # 已排序：first = 主信号里幅度最大
-        reason=("reason", lambda s: " · ".join(s)),   # 多信号合并理由
+        reason=("reason", lambda s: "\n".join(s)),   # 多信号合并理由：逐条换行展示
     )
     # 三信号「平衡」选取 top_n
     nr_idx = list(agg[agg["prio"] == 0].sort_values("score", ascending=False).index)

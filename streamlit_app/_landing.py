@@ -31,8 +31,8 @@ PAGES = [
         "n": 1,
         "icon": "📊",
         "title": t("类目详情", "Category Detail"),
-        "desc": t("类目层描述性分析：基本指标 + 基础分布 + 需求增量/存量象限图",
-                  "Category-level descriptive analysis: key metrics + distributions + demand increment/stock quadrant"),
+        "desc": t("类目层描述性分析：基本指标 + 基础分布 + 需求增量/增速象限图",
+                  "Category-level descriptive analysis: key metrics + distributions + demand increment/growth quadrant"),
         "demo": True,
         "url": "/category-detail",
     },
@@ -58,8 +58,8 @@ PAGES = [
         "n": 4,
         "icon": "🎯",
         "title": t("类目综合评分", "Composite Score"),
-        "desc": t("评分系统：5 维模型 + 双层加权 + 权重偏好动态调整 + 优先级类型分布",
-                  "Scoring system: 5-factor model + two-layer weighting + dynamic weight preferences + priority-type distribution"),
+        "desc": t("评分系统：5 维模型 + 权重偏好动态调整 + 优先级类型分布",
+                  "Scoring system: 5-factor model + dynamic weight preferences + priority-type distribution"),
         "demo": True,
         "url": "/composite-score",
     },
@@ -104,12 +104,10 @@ st.markdown(
     "<div style='font-size:1.0rem; line-height:1.7; color:#2c3e50; "
     "padding: 8px 0 4px 0;'>"
     + t(
-        "基于Amazon三类榜单（BS / NR / MS）的自动化采集 + 多维评分 + 行动指引系统 — "
-        "建立 <b>可审计、可复算、可回放</b>的 <b>类目选品决策</b> 数据流程。",
-        "An automated pipeline over Amazon's three rankings (BS / NR / MS): "
-        "collection + multi-factor scoring + action playbook — building an "
-        "<b>auditable, reproducible, replayable</b> data process for "
-        "<b>category sourcing decisions</b>.",
+        "基于Amazon三类榜单（BS / NR / MS）的自动化采集 + 多维评分 + 行动指引的"
+        "<b>类目选品决策系统</b>",
+        "An automated <b>category-sourcing decision system</b> over Amazon's three "
+        "rankings (BS / NR / MS): collection + multi-factor scoring + action playbook.",
     )
     + "</div>",
     unsafe_allow_html=True,
@@ -194,12 +192,10 @@ with m1:
         + t("评分系统", "Scoring System") + "</div>"
         "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
         + t(
-            "<b>5 维</b>：市场吸引力 / 开放度 / 新品空间 / 增长动能 / 结构稳定<br><br>"
-            "<b>双层加权</b>：数据驱动+业务调整<br><br>"
-            "<b>模型指标</b>：筛选 → 候选 → selected",
-            "<b>5 factors</b>: Market Attractiveness / Openness / New-Product Room / Momentum / Stability<br><br>"
-            "<b>Two-layer weighting</b>: data-driven + business adjustment<br><br>"
-            "<b>Model metrics</b>: screened &rarr; candidate &rarr; selected",
+            "<b>5 维模型</b>：市场吸引力 / 开放度 / 新品空间 / 增长动能 / 结构稳定<br><br>"
+            "<b>权重调整</b>：根据业务偏好调整维度权重",
+            "<b>5-factor model</b>: Market Attractiveness / Openness / New-Product Room / Momentum / Stability<br><br>"
+            "<b>Weight adjustment</b>: adjust factor weights by business preference",
         )
         + "</div></div>",
         unsafe_allow_html=True,
@@ -210,18 +206,13 @@ with m2:
         "<div style='background:#fdf2f8; border-left:4px solid #c026d3; "
         "border-radius:6px; padding:14px 16px; min-height:200px;'>"
         "<div style='font-size:1.0rem; font-weight:600; color:#1a2940; margin-bottom:8px;'>"
-        + t("Opportunity Signals", "Opportunity Signals") + "</div>"
+        + t("特征信号", "Feature Signals") + "</div>"
         "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
         + t(
-            "对 市场吸引力 / 开放度 / 结构稳定 三维做<b>百分位</b>切线"
-            "（动能方向歧义、新品空间数据稀疏，<b>不参与信号</b>）<br><br>"
-            "<b>优势信号</b>（≥P75）：需求居前 / 市场开放 / 波动较小<br><br>"
-            "<b>约束信号</b>（≤P25）：需求居后 / 品牌壁垒 / 波动较大",
-            "Percentile cutoffs over Market Attractiveness / Openness / Stability "
-            "(Momentum is directionally ambiguous and New Product is sparse, so both are "
-            "<b>excluded from signals</b>)<br><br>"
-            "<b>Strengths</b> (&ge;P75): Top-quartile demand / Open Market / Low volatility<br><br>"
-            "<b>Constraints</b> (&le;P25): Bottom-quartile demand / Brand Barrier / High volatility",
+            "<b>优势信号</b>：需求居前 / 市场开放 / 波动较小<br><br>"
+            "<b>约束信号</b>：需求居后 / 品牌壁垒 / 波动较大",
+            "<b>Strengths</b>: Top demand / Open market / Low volatility<br><br>"
+            "<b>Constraints</b>: Bottom demand / Brand barrier / High volatility",
         )
         + "</div></div>",
         unsafe_allow_html=True,
@@ -235,13 +226,13 @@ with m3:
         + t("5 档优先级类型", "5 Priority Tiers") + "</div>"
         "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
         + t(
-            "按综合机会分<b>百分位</b>分 5 档：<br>"
+            "按综合分数分 5 档：<br>"
             "<b>高潜机会</b> — 推荐优先<br>"
             "<b>较高机会</b> — 重点关注<br>"
             "<b>中性观察</b> — 均衡待察<br>"
             "<b>谨慎评估</b> — 谨慎权衡<br>"
             "<b>暂不考虑</b> — 暂缓<br><br>",
-            "5 tiers by composite-score <b>percentile</b>:<br>"
+            "5 tiers by composite score:<br>"
             "<b>High-potential</b> — prioritize<br>"
             "<b>Higher</b> — strong focus<br>"
             "<b>Balanced</b> — monitor<br>"
