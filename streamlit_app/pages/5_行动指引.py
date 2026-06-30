@@ -6,7 +6,7 @@
 # 与生产 v2 差异：
 #   - 数据源 data/amazon.db → data/*.csv（connect_demo）；类目/品牌/ASIN 已匿名化
 #   - positive_signals / risk_signal：生产 v2 由评分引擎写入 db（CSV 无此两列）。Demo 在
-#     load 时**用与 v2 评分引擎同一套百分位算法**（A/C/M/T 四维 P75→优势 / P25→约束，
+#     load 时**用与 v2 评分引擎同一套百分位算法**（A/C/T 三维 P75→优势 / P25→约束，
 #     优势取分值最高 2 个、约束取最严 1 个）从 5 维分现算，非造数据。
 #   - 优先级类型(Tier)：从 composite_score 百分位重算（与综合评分页同口径）。
 # 主要改动：
