@@ -1,9 +1,11 @@
 # streamlit_app/_landing.py
-# 更新日期：2026-06-28
+# 更新日期：2026-06-30
 # 用途：Demo 落地页正文（产品定位 + 数据流 + 5 页架构 + 方法论概览）
 #       作为 st.navigation 的默认 page；入口路由器是同目录的 产品概览.py
 # 启动：streamlit run streamlit_app/产品概览.py（经路由器加载本页）
 # 主要改动：
+#   - 2026-06-30：方法论三卡换序——评分系统 → 5档优先级类型 → 特征信号（原 信号/优先级 互换位置），
+#                 符合「评分 → 优先级输出 → 特征信号」逻辑流。卡片配色随内容走（优先级绿/信号粉）。
 #   - 2026-06-01：页面全部公开；卡片统一绿边框 + 可点箭头
 #   - 2026-06-23：UI 文案中英双语化（包 t()）+ 配合 st.navigation 入口清理 set_page_config/header
 #   - 2026-06-28：对齐生产 v2 — 6 页 → 5 页（「头部品牌竞争」改名 + 删除独立「ASIN 流动性」页，
@@ -203,23 +205,6 @@ with m1:
 
 with m2:
     st.markdown(
-        "<div style='background:#fdf2f8; border-left:4px solid #c026d3; "
-        "border-radius:6px; padding:14px 16px; min-height:200px;'>"
-        "<div style='font-size:1.0rem; font-weight:600; color:#1a2940; margin-bottom:8px;'>"
-        + t("特征信号", "Feature Signals") + "</div>"
-        "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
-        + t(
-            "<b>优势信号</b>：需求居前 / 市场开放 / 波动较小<br><br>"
-            "<b>约束信号</b>：需求居后 / 品牌壁垒 / 波动较大",
-            "<b>Strengths</b>: Top demand / Open market / Low volatility<br><br>"
-            "<b>Constraints</b>: Bottom demand / Brand barrier / High volatility",
-        )
-        + "</div></div>",
-        unsafe_allow_html=True,
-    )
-
-with m3:
-    st.markdown(
         "<div style='background:#f0fdf4; border-left:4px solid #16a34a; "
         "border-radius:6px; padding:14px 16px; min-height:200px;'>"
         "<div style='font-size:1.0rem; font-weight:600; color:#1a2940; margin-bottom:8px;'>"
@@ -238,6 +223,23 @@ with m3:
             "<b>Balanced</b> — monitor<br>"
             "<b>Watch</b> — weigh carefully<br>"
             "<b>Skip</b> — defer<br><br>",
+        )
+        + "</div></div>",
+        unsafe_allow_html=True,
+    )
+
+with m3:
+    st.markdown(
+        "<div style='background:#fdf2f8; border-left:4px solid #c026d3; "
+        "border-radius:6px; padding:14px 16px; min-height:200px;'>"
+        "<div style='font-size:1.0rem; font-weight:600; color:#1a2940; margin-bottom:8px;'>"
+        + t("特征信号", "Feature Signals") + "</div>"
+        "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
+        + t(
+            "<b>优势信号</b>：需求居前 / 市场开放 / 波动较小<br><br>"
+            "<b>约束信号</b>：需求居后 / 品牌壁垒 / 波动较大",
+            "<b>Strengths</b>: Top demand / Open market / Low volatility<br><br>"
+            "<b>Constraints</b>: Bottom demand / Brand barrier / High volatility",
         )
         + "</div></div>",
         unsafe_allow_html=True,

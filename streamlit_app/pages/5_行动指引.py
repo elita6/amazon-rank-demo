@@ -10,6 +10,9 @@
 #     优势取分值最高 2 个、约束取最严 1 个）从 5 维分现算，非造数据。
 #   - 优先级类型(Tier)：从 composite_score 百分位重算（与综合评分页同口径）。
 # 主要改动：
+#   - 2026-06-30（同步生产 v2 决策10）：重点 ASIN 信号③ 由「MS 提升率%Top(剔>300%)」改为
+#       「MS→BS」（MS 首现日严格早于 BS 首现日，与①NR→BS 同构）；MS 提升率% 由起点排名深度主导、
+#       不反映持续势头。删 MS_SURGE_CAP/MS_TOP 常量。信号① 文案「NR榜新品冲进BS榜」→「NR榜冲进BS榜」。
 #   - 2026-06-29（信号体系同步生产 v2）：① 增长动能(momentum)退出优势/约束信号（方向歧义）——
 #       SIG_DIMS 删 momentum 维（不再生成 High/Weak Momentum 信号）、SIGNAL_LABELS 同删两键。
 #       ② 需求信号软化为「需求居前/需求居后」(Top/Bottom-quartile demand)。③ 结构稳定信号改
@@ -171,8 +174,6 @@ def _is_bad_brand(nb):
 # 模块 1：重点 ASIN（全窗口去重池 + 品牌清洗）
 # ---------------------------------------------------------------
 CLIMB_MIN = 15        # BS 榜内爬升达到此名次差才算"上升"
-MS_SURGE_CAP = 300    # MS 飙升率上限：> 此值多为排名重置脏数据，直接剔除不选
-MS_TOP = 8            # MS 候选最多取这么多（按飙升幅度）
 
 
 @st.cache_data
@@ -217,7 +218,7 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
     nr_first = nr.groupby("asin")["date"].min()
     for a in bs_first.index.intersection(nr_first.index):
         if a in latest.index and (bs_first[a] - nr_first[a]).days > 0:
-            sigs.append((a, 0, 0.0, t("🚀 NR榜新品冲进BS榜", "🚀 NR new release → BS bestseller")))
+            sigs.append((a, 0, 0.0, t("🚀 NR榜冲进BS榜", "🚀 NR → BS bestseller")))
     # ② BS 榜内排名爬升（首现名次 − 最新名次 ≥ CLIMB_MIN）
     bs_pool = bs[~bs["brand_norm"].isin(blocked)]
     for a, g in bs_pool.groupby("asin"):
@@ -232,14 +233,12 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
             sigs.append((a, 1, float(climb),
                          t(f"⬆️ BS 榜内排名爬升{climb}名（{r0}→{r1}）",
                            f"⬆️ Climbed {climb} spots within BS ({r0}→{r1})")))
-    # ③ MS 飙升：每 ASIN 取最大提升率；剔除 >MS_SURGE_CAP 的，取真实值 Top
-    ms_pool = ms[~ms["brand_norm"].isin(blocked)].dropna(subset=["pct_chg_sales_rank"])
-    if not ms_pool.empty:
-        ms_best = ms_pool.groupby("asin")["pct_chg_sales_rank"].max()
-        ms_best = ms_best[(ms_best > 0) & (ms_best <= MS_SURGE_CAP)].sort_values(ascending=False).head(MS_TOP)
-        for a, v in ms_best.items():
-            if a in latest.index:
-                sigs.append((a, 2, float(v), t(f"📈 MS榜排名飙升+{v:.0f}%", f"📈 MS rank surge +{v:.0f}%")))
+    # ③ MS→BS：MS 榜首现日 严格早于 BS 榜首现日（曾在飙升榜出现、之后冲进 BS）。与 ① 同构。
+    #   不用 MS 榜内提升率%——该值由起点排名深度主导、不反映持续势头（同步生产 v2 决策10）。
+    ms_first = ms.groupby("asin")["date"].min()
+    for a in bs_first.index.intersection(ms_first.index):
+        if a in latest.index and (bs_first[a] - ms_first[a]).days > 0:
+            sigs.append((a, 2, 0.0, t("📈 MS榜冲进BS榜", "📈 MS → BS bestseller")))
     if not sigs:
         return None, excluded_groups
 
@@ -261,7 +260,7 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
             picks.append(ms_idx[mi]); mi += 1
         if len(picks) < top_n and bi < len(bs_idx):
             picks.append(bs_idx[bi]); bi += 1
-    # 选取是平衡的；但显示按信号分组（新品冲榜 → BS爬升 → MS飙升），同组按幅度从大到小，不交叉
+    # 选取是平衡的；但显示按信号分组（NR→BS → BS爬升 → MS→BS），同组按幅度从大到小，不交叉
     sel = agg.loc[picks].sort_values(["prio", "score"], ascending=[True, False])
     out = sel.join(
         latest[["brand", "price_low", "review_count", "rate", "product_url"]]).reset_index()
@@ -494,9 +493,9 @@ st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 chart_title(f"● {t('重点 ASIN', 'Top ASINs to Watch')} — {selected}")
 st.caption(t(
     "正在「上升」、值得关注的产品（已剔 Amazon 自营族）。三类上升信号平衡选取："
-    "🚀 NR榜新品冲进BS榜 · ⬆️ BS榜内排名爬升 · 📈 MS榜排名飙升。",
+    "🚀 NR榜冲进BS榜 · ⬆️ BS榜内排名爬升 · 📈 MS榜冲进BS榜。",
     "Products on the rise (Amazon family excluded), balanced across three signals: "
-    "🚀 NR new release → BS bestseller · ⬆️ climbing within BS · 📈 MS rank surge."))
+    "🚀 NR → BS bestseller · ⬆️ climbing within BS · 📈 MS → BS bestseller."))
 top_df, excluded_brands = compute_top_opportunity_asins(selected, get_lang(), top_n=10)
 if excluded_brands:
     st.caption(t("注：已排除 Amazon 品牌族：", "Note: excluded Amazon family: ")
