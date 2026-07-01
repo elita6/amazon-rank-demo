@@ -1,7 +1,10 @@
 # demo/streamlit_app/_demo_data.py
-# 更新日期：2026-05-12
+# 更新日期：2026-07-01
 # 用途：把 demo/data/*.csv 加载到 in-memory sqlite，让原 streamlit 页面 sqlite 查询零修改可用
 # 同时提供 inline 版 market_heat_index（避免依赖 core.analytics.indicators）
+# 主要改动：
+#   - 2026-07-01：加载 asin_daily 时把占位串 brand='Brand_NA' 置空（对齐生产 brand 缺失的
+#       None 语义），避免其归一化成 "brandna" 被当成巨型品牌污染品牌集中度；产品行保留计入体量。
 
 from pathlib import Path
 import sqlite3
@@ -38,6 +41,12 @@ def _build_memory_db():
     for tbl in CSV_TABLES:
         csv_path = DATA_DIR / f"{tbl}.csv"
         df = pd.read_csv(csv_path)
+        if tbl == "asin_daily" and "brand" in df.columns:
+            # Brand_NA = demo 数据里「无品牌/品牌缺失」的占位串，非真实品牌。
+            # 置空（对齐生产真实数据 brand 缺失的 None 语义），使其被 normalize_brand → dropna
+            # 统一剔除，不再归一化成 "brandna" 当成一个巨型品牌污染 CR3/坑位集中度/品牌密度。
+            # 只清品牌归属，产品行保留，仍计入需求/体量类指标。
+            df.loc[df["brand"] == "Brand_NA", "brand"] = np.nan
         df.to_sql(tbl, conn, index=False, if_exists="replace")
     # 关键索引（加速 archetype 详情页查询）
     conn.execute("CREATE INDEX IF NOT EXISTS idx_asin_cat ON asin_daily(category)")
