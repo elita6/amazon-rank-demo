@@ -5,7 +5,7 @@
 # 启动命令：streamlit run streamlit_app/产品概览.py
 # 与生产 v2 差异：
 #   - 数据源从 data/amazon.db 改为 data/*.csv（_demo_data.connect_demo in-memory sqlite）
-#   - 类目/品牌/ASIN 已匿名化（Category A~E / Brand_xxx）；CAT_SHORT/TEXT_POS 对 demo 类目无映射，
+#   - 类目/品牌/ASIN 已匿名化（Category A~R / Brand_xxx）；CAT_SHORT/TEXT_POS 对 demo 类目无映射，
 #     自动回退原名/默认方位，不影响逻辑
 # 主要改动：
 #   - 2026-06-28：从生产 v2 类目详情.py 移植（去「三榜合并」默认 BS；价格/评论 winsor_mean；

@@ -22,7 +22,7 @@ Turns Amazon category selection from gut-feel into an auditable, data-driven wor
 
 | Aspect | Full version | This demo |
 |---|---|---|
-| Categories | ~20 anonymized real Amazon verticals | 5 (renamed Category A ~ E) |
+| Categories | 19 real Amazon verticals | 18 (renamed Category A ~ R; 1 first-party-dominated category excluded) |
 | Brands | 5K+ real names | `Brand_001` ~ `Brand_N` |
 | ASINs | 15K+ real B0XXXXXXXX | `DEMO00001` ~ `DEMO0XXXX` |
 | Price / review | actual values | ±5% noise |

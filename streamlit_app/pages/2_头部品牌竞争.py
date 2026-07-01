@@ -123,9 +123,9 @@ fig_h.update_xaxes(side="top", tickfont=dict(size=11))
 # 三项集中度（Top3份额/评论占比/品牌密度）合并解读取数：用组合排名给"最集中/最分散"。
 #   三者实测两两正相关、相对排名稳健，故合起来一起说、不逐条罗列；解读文案不放术语。
 _conc = (df_cr["shelf"].rank() + df_cr["demand"].rank() + df_cr["asin_per_brand"].rank())
-# demo 仅 5 个类目：取前2/后2，避免 nlargest(3)+nsmallest(3) 重叠（3+3>5 中间类目会两边都出现）
-_most = "、".join(f"<b>{c}</b>" for c in df_cr.loc[_conc.nlargest(2).index, "category"])
-_least = "、".join(f"<b>{c}</b>" for c in df_cr.loc[_conc.nsmallest(2).index, "category"])
+# 取前3/后3（demo 18 类目，6<18 不会重叠；类目更少时会自动截断到可用数量）
+_most = "、".join(f"<b>{c}</b>" for c in df_cr.loc[_conc.nlargest(3).index, "category"])
+_least = "、".join(f"<b>{c}</b>" for c in df_cr.loc[_conc.nsmallest(3).index, "category"])
 
 # Top3 散点
 fig = px.scatter(

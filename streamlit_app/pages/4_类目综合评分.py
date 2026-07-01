@@ -5,7 +5,7 @@
 #       侧边栏 4 个权重预设 + 5 维滑块，动态重算综合分 / 优先级类型(Tier) / Flag。
 # 启动命令：streamlit run streamlit_app/产品概览.py
 # 与生产 v2 差异：
-#   - 数据源 data/amazon.db → data/*.csv（connect_demo）；类目已匿名化（Category A~E）
+#   - 数据源 data/amazon.db → data/*.csv（connect_demo）；类目已匿名化（Category A~R）
 #   - 默认权重：生产 v2 从 config/scoring_config.yaml 读取；Demo 无 config 目录，直接内联
 #     DEFAULT_WEIGHTS = A0.25 / C0.25 / N0.20 / M0.15 / T0.15（与 v2 dimension_weights 一致）
 # 主要改动：
@@ -189,8 +189,8 @@ if df is None:
 # 页面副标题
 st.markdown(
     "<div style='color:#6b7280; font-size:0.85rem; margin: 4px 0 16px 0;'>"
-    + t("注：Demo 数据已匿名化（Category A~E）",
-        "Note: demo data is anonymized (Category A~E)")
+    + t("注：Demo 数据已匿名化（Category A~R）",
+        "Note: demo data is anonymized (Category A~R)")
     + "</div>",
     unsafe_allow_html=True,
 )
