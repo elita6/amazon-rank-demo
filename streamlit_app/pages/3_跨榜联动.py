@@ -6,6 +6,9 @@
 # 启动命令：streamlit run streamlit_app/产品概览.py
 # 与生产 v2 差异：数据源 data/amazon.db → data/*.csv（connect_demo）；类目/品牌已匿名化。
 # 主要改动：
+#   - 2026-07-01（同步生产 v2）：删「类目排名平均提升率排行」第三条解读（「少数爆款前10%是
+#       均值N倍——集中在个别单品」）——p90_pct 未画在图上（仅 hover）、且属类目内分布结论，
+#       本图（跨类目平均排行）撑不起，删除（宁可不说不瞎说）；清理仅服务它的 _cb2。
 #   - 2026-06-30（同步生产 v2）：① 合并双视角为单页滚动，删 2 按钮切换（流动性在上、MS在下）；
 #       ② 删「每日排名平均提升率 by 类目」spaghetti 图 + 解读（指标最噪+信息冗余）；
 #       ③ Top20 爆发 ASIN 表 ASIN 列改 LinkColumn（点击跳商品页），解读去行内直链 + 删
@@ -427,19 +430,15 @@ with st.container(border=True):
         _nc = len(_cb)
         _hi, _lo = _cb.iloc[0], _cb.iloc[-1]
         _top3 = "、".join(f"<b>{r['category']}</b> {r['wmean_pct']:,.0f}%" for _, r in _cb.head(3).iterrows())
-        _cb2 = _cb[_cb["wmean_pct"] > 0].copy()
+        # 只保留条形图直接支撑的两条（最高/最低 + IQR 区间）。
+        # 原第三条「少数爆款前10%是均值N倍/集中在个别单品」用 p90_pct，但本图只画平均值条、
+        # P90 仅在 hover，且「集中在个别单品」属类目内分布结论——本图撑不起，删除（宁可不说不瞎说）。
         _items_b1 = [
             t(f"MS <b>排名平均提升率</b>最高的几个类目：{_top3}；最低的 <b>{_lo['category']}</b> 只 {_lo['wmean_pct']:,.0f}%。",
               f"Highest MS <b>avg rank gain</b>: {_top3}; the lowest, <b>{_lo['category']}</b>, just {_lo['wmean_pct']:,.0f}%."),
             t(f"多数类目排名平均提升率落在 {_cb['wmean_pct'].quantile(0.25):,.0f}%–{_cb['wmean_pct'].quantile(0.75):,.0f}% 之间。",
               f"Most categories' avg rank gain falls between {_cb['wmean_pct'].quantile(0.25):,.0f}% and {_cb['wmean_pct'].quantile(0.75):,.0f}%."),
         ]
-        if not _cb2.empty:
-            _cb2["_g"] = _cb2["p90_pct"] / _cb2["wmean_pct"]
-            _g = _cb2.loc[_cb2["_g"].idxmax()]
-            _items_b1.append(
-                t(f"<b>{_g['category']}</b> 少数爆款的提升率（前 10% 高位 {_g['p90_pct']:,.0f}%）是其平均（{_g['wmean_pct']:,.0f}%）的 {_g['_g']:.0f} 倍——爆发集中在个别单品。",
-                  f"In <b>{_g['category']}</b> the top-10% products' gain ({_g['p90_pct']:,.0f}%) is {_g['_g']:.0f}× its average ({_g['wmean_pct']:,.0f}%)—bursts concentrate in a few items."))
         insight_box(_items_b1)
 
 
