@@ -1,11 +1,19 @@
 # streamlit_app/_aggregate.py
-# 更新日期：2026-06-28
+# 更新日期：2026-07-04
 # 用途：新版页专用「统一聚合口径」实现（决策1 聚合契约）。
-#       （Demo 版：与生产 v2/streamlit_app/_aggregate.py 同一份纯函数，仅依赖 pandas，逐字移植。）
+#       （Demo 版：与生产 v3/streamlit_app/_aggregate.py 同一份纯函数，仅依赖 pandas，逐字移植。
+#        Demo 无 core 包、无 config/scoring_config.yaml、无 PyYAML —— 见下方 excluded_categories 说明。）
 # 主要改动：
 #   - 2026-06-28 从生产 v2 移植：winsor_mean / demand_increment_index / demand_stock_index /
 #       nr_to_bs_penetration / on_list_occupancy / bs_new_asin_ratio / ms_burst_winsor /
 #       distribution_insights / crosslink_neg / fmt_compact / latest_review_repr
+#   - 2026-07-04 同步生产 v3（方案C 后端，追加不改旧）：
+#       new_brand_demand_share（决策14 新牌友好度 d，openness 第三腿，按 ASIN 坑位·时序占有率）、
+#       nr_ms_penetration（NR→MS 渗透率，方案C 新品 Bonus + 新品生态象限 Y 轴）、
+#       asin_review_crn（决策11 商品需求集中度 CRn，竞争结构页 Y 轴）、
+#       excluded_categories（展示层黑名单接口）。
+#       ——Demo core-free/dep-free 适配：excluded_categories 不读 scoring_config.yaml（Demo 无 config
+#         目录 / 无 PyYAML），直接返回空集；Demo 数据由生成器上游已剔除黑名单类目（当前 18 类，无自营）。
 
 import pandas as pd
 
@@ -26,6 +34,18 @@ def winsor_mean(series, low=WINSOR_LOW, high=WINSOR_HIGH):
         return None
     lo, hi = s.quantile(low), s.quantile(high)
     return float(s.clip(lo, hi).mean())
+
+
+def excluded_categories(root=None):
+    """展示层黑名单接口（Demo 版：恒返回空集）。
+
+    生产 v3 版读 config/scoring_config.yaml 的 category_overrides.excluded_categories，
+    保证「评分排除的类目，展示也不出现」。Demo 无 config 目录 / 无 PyYAML，且 Demo 数据由
+    生成器（tools/prepare_demo_data）上游已把黑名单类目剔除（当前 18 类，均非自营），
+    展示层再排除即为 no-op —— 故此处直接返回空集，避免引入 yaml/config 依赖（保持 core-free/dep-free）。
+    签名保留 root 位参与生产一致，页面 import 与调用零改动。
+    """
+    return set()
 
 
 def _per_asin_increments(df, asin_col="asin", date_col="date",
@@ -57,6 +77,29 @@ def latest_review_repr(df, date_col="date", review_col="review_count",
     latest = d[date_col].max()
     snap = d[d[date_col] == latest]
     return winsor_mean(snap[review_col], low, high)
+
+
+def asin_review_crn(df, n=10, asin_col="asin", date_col="date",
+                    review_col="review_count"):
+    """决策11 · 商品需求集中度 CRn = 按**评论降序**前 N 个 ASIN 的评论占比。
+
+    每个 ASIN 取最新累计评论（评论只增不减，取 last；与 brand_breakdown 同口径），
+    再取评论最高的 N 个占全类目评论和之比。粒度 = 单商品(Listing)，不涉及品牌。
+    openness 商品腿 + 竞争结构页 Y 轴用它。评论是销量代理，销量到位即 review→sales 一处替换。
+    默认 n=10：商品粒度细、Top3 覆盖面太窄（业内商品集中度惯例即 Top10，见 改造依据.md 决策11）。
+    """
+    if df is None or df.empty:
+        return None
+    d = df.dropna(subset=[review_col])
+    if d.empty:
+        return None
+    pa = d.sort_values(date_col).groupby(asin_col)[review_col].last()
+    pa = pa[pa > 0]
+    tot = pa.sum()
+    if tot <= 0 or len(pa) == 0:
+        return None
+    top = pa.sort_values(ascending=False).head(n).sum()
+    return round(float(top / tot), 4)
 
 
 def demand_increment_index(df, asin_col="asin", date_col="date",
@@ -253,6 +296,51 @@ def distribution_insights(df, cat_col, val_col, id_col=None):
         "tail_id": tail_id,
         "n_cat": int(rep.size),
     }
+
+
+def new_brand_demand_share(cat_df, list_col="list_type", date_col="date",
+                           asin_col="asin", brand_col="brand_norm", review_col="review_count"):
+    """决策14/15/16 · 新牌友好度 d = 新牌在 NR 榜占的坑位比例(按 ASIN 数,openness 第三腿)。
+
+    **时序口径(决策15)**:老品牌 = 在 BS 榜「首现不晚于」其 NR 首现的品牌(first_BS ≤ first_NR);
+    在 NR 上**严格早于** BS 出现的品牌(= NR→BS 毕业新牌)算**新牌**。首日平局(first_BS==first_NR)算老牌。
+    **决策16:改按 ASIN 坑位(原按评论)** —— d = 非老牌的 NR ASIN 数 ÷ NR 总 ASIN 数。
+    按评论易被单个评论重的产品带偏、且把「占据」误读成「吃需求」;按坑位更贴
+    「老牌占据新品榜」本意、更稳(重测 0.92 vs 0.89)。展示「NR_BS品牌占有率」= 1 − d = 老牌坑位占比。
+    日期用 ISO 串比较即按时间序。review_col 保留仅为签名兼容,本口径不使用。"""
+    nr = cat_df[cat_df[list_col] == "new_release"].dropna(subset=[brand_col])
+    bs = cat_df[cat_df[list_col] == "best_seller"].dropna(subset=[brand_col])
+    if nr.empty:
+        return None
+    nr_first = nr.groupby(brand_col)[date_col].min()
+    bs_first = bs.groupby(brand_col)[date_col].min() if not bs.empty else None
+    # 每个 NR ASIN 的归一化品牌(众数);按坑位=每个 ASIN 一票
+    amap = nr.groupby(asin_col)[brand_col].agg(lambda s: s.mode().iloc[0])
+    tot = len(amap)
+    if tot == 0:
+        return None
+
+    def _is_incumbent(b):
+        # 老牌:BS 有该品牌 且 BS 首现 ≤ NR 首现(平局算老牌;NR 严格早于 BS = 毕业新牌,不算)
+        if bs_first is None or b not in bs_first.index or b not in nr_first.index:
+            return False
+        return bs_first[b] <= nr_first[b]
+
+    new = sum(1 for b in amap.values if not _is_incumbent(b))
+    return round(float(new / tot), 4)
+
+
+def nr_ms_penetration(cat_df, list_col="list_type", asin_col="asin", return_count=False):
+    """NR→MS 渗透率 = 同时在 NR 和 MS 榜的去重 ASIN ÷ NR 去重 ASIN。
+    新品在飙升榜出现=新品冲销量势能。方案C 的新品Bonus + 新品生态象限 Y 轴。
+    return_count=True 时返回 (渗透率, overlap_count) 供零事件过滤。"""
+    nr = set(cat_df[cat_df[list_col] == "new_release"][asin_col].dropna().unique())
+    ms = set(cat_df[cat_df[list_col] == "movers_shakers"][asin_col].dropna().unique())
+    if not nr:
+        return (None, 0) if return_count else None
+    cnt = len(nr & ms)
+    pen = round(cnt / len(nr), 4)
+    return (pen, cnt) if return_count else pen
 
 
 def crosslink_neg(rep_a, rep_b, min_n=5, thresh=-0.3):

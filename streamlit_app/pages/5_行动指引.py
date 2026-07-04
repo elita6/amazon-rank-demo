@@ -1,27 +1,21 @@
 # streamlit_app/pages/5_行动指引.py
-# 更新日期：2026-06-29
-# 用途：行动指引页（Demo 版，对齐生产 v2）— 单类目深度。
-#       模块：摘要（优先级类型 + Opportunity Signals 优势/约束）→ 价位带参考（100% 堆积条）→ 重点 ASIN。
-# 启动命令：streamlit run streamlit_app/产品概览.py
-# 与生产 v2 差异：
-#   - 数据源 data/amazon.db → data/*.csv（connect_demo）；类目/品牌/ASIN 已匿名化
-#   - positive_signals / risk_signal：生产 v2 由评分引擎写入 db（CSV 无此两列）。Demo 在
-#     load 时**用与 v2 评分引擎同一套百分位算法**（A/C/T 三维 P75→优势 / P25→约束，
-#     优势取分值最高 2 个、约束取最严 1 个）从 5 维分现算，非造数据。
-#   - 优先级类型(Tier)：从 composite_score 百分位重算（与综合评分页同口径）。
-# 主要改动：
-#   - 2026-06-30（同步生产 v2 决策10）：重点 ASIN 信号③ 由「MS 提升率%Top(剔>300%)」改为
-#       「MS→BS」（MS 首现日严格早于 BS 首现日，与①NR→BS 同构）；MS 提升率% 由起点排名深度主导、
-#       不反映持续势头。删 MS_SURGE_CAP/MS_TOP 常量。信号① 文案「NR榜新品冲进BS榜」→「NR榜冲进BS榜」。
-#   - 2026-06-29（信号体系同步生产 v2）：① 增长动能(momentum)退出优势/约束信号（方向歧义）——
-#       SIG_DIMS 删 momentum 维（不再生成 High/Weak Momentum 信号）、SIGNAL_LABELS 同删两键。
-#       ② 需求信号软化为「需求居前/需求居后」(Top/Bottom-quartile demand)。③ 结构稳定信号改
-#       「波动较小/波动较大」(Low/High volatility)。均仅改显示名，内部英文键不变。
-#   - 2026-06-29：关注理由列 + 重点 ASIN 说明措辞统一为简写——🚀NR榜新品冲进BS榜 /
-#       ⬆️BS榜内排名爬升X名(r0→r1) / 📈MS榜排名飙升+X%（仅改展示字符串，信号逻辑/阈值不变）。
-#   - 2026-06-29：修「关注理由」列语言切不动的缓存 bug——compute_top_opportunity_asins 加 lang
-#       参数（仅用于 @st.cache_data 缓存分桶），调用处传 get_lang()，使中/英各缓存一份、切换后重算。
-#   - 2026-06-28：从生产 v2 pages/5_行动指引.py 移植；信号/Tier 由 db 列改为现算（CSV 后端适配）。
+# 更新日期：2026-07-04
+# Demo 适配：数据源 data/amazon.db → data/*.csv（_demo_data.connect_demo）；类目/品牌/ASIN 已匿名化；
+#   读 *_c 后缀评分列（由 demo CSV 提供）；Amazon 商品链接为 demo 占位（ASIN 已脱敏）。
+# 原文件：v3/streamlit_app/pages/5_行动指引.py（方案C 对照版：3 维信号 + 新品Bonus）
+# 更新日期（原）：2026-07-03
+# 用途：行动指引页「方案C 对照版」— 复制自 5_行动指引.py，原页一字不动便于 A/B 对照。
+#       方案C 口径：信号 3 维（market_size/openness/stability，读 *_c 列）+ 新品Bonus 单独成「新品成长」标签。
+#       数据基于默认权重评分（不跟随综合评分页滑块）。
+# 主要改动（相对原页，均为方案C 定制）：
+#   - 2026-07-03（新建·方案C 对照版）：
+#       ① 数据源改读 *_c 后缀列：composite_score_c / tier_c / positive_signals_c / risk_signal_c / bonus_c。
+#       ② 优势/约束信号维度 = 3 维（market_size / openness / stability），读 positive_signals_c / risk_signal_c；
+#          SIGNAL_LABELS 本就只含这 3 维（momentum/new_product 不参与信号），保持不动。
+#       ③ 新品Bonus 单独作为「新品成长」标签展示（Strong / Medium / —，来自 bonus_c），
+#          不并进三维的优势/约束信号里。
+#       ④ 价位带参考、重点 ASIN 两模块读 asin_daily，与评分口径无关，保持原逻辑与 i18n 不动。
+#   —— 原页 5_行动指引.py 与本页无关，保持不动。
 
 import sys
 from pathlib import Path
@@ -50,15 +44,15 @@ BAND_LABELS = {
     "B5": t("高价格段", "Highest"),
 }
 
-# ---- Opportunity Signals ----
-# Overall Rating(=Tier) 展示简称 + 徽章色
+# ---- Opportunity Signals（方案C：3 维信号，读 *_c 列）----
+# Overall Rating(=Tier_c) 展示简称
 TIER_LABEL = {
     "高潜机会类目": t("高潜机会", "Top"),     "较高机会类目": t("较高机会", "High"),
     "中性观察类目": t("中性观察", "Balanced"), "谨慎评估类目": t("谨慎评估", "Watch"),
     "暂不考虑类目": t("暂不考虑", "Skip"),
 }
-# 信号中英显示名（db 英文键不变，仅改显示；正向=优势/绿 chip，负向=约束/琥珀 chip）
-# momentum 不参与信号（方向歧义：高=有上升通道/也=赛道变挤），故无 High/Weak Momentum 映射
+# 信号中英显示名（db 存英文；正向=优势/绿 chip，负向=约束/琥珀 chip）
+# 方案C 仅 3 维参与信号（market_size / openness / stability）；momentum、new_product 不参与
 SIGNAL_LABELS = {
     "Strong Demand":    t("需求居前", "Top-quartile demand"), "Open Market":     t("市场开放", "Open Market"),
     "Weak Demand":      t("需求居后", "Bottom-quartile demand"), "Brand Barrier":  t("品牌壁垒", "Brand Barrier"),
@@ -66,60 +60,8 @@ SIGNAL_LABELS = {
 }
 STRENGTH_BG, CONSTRAINT_BG = "#e8f6ef", "#fdece4"
 STRENGTH_FG, CONSTRAINT_FG = "#1e8449", "#ba4a00"
-
-# ---- 信号 / Tier 现算配置（= 生产 v2 scoring_config.yaml opportunity_signals + tier_thresholds）----
-# 注：momentum 不参与信号（= 生产 v2，方向歧义），故 SIG_DIMS 不含 momentum 维 → 不生成任何动能信号
-SIG_DIMS = [
-    {"key": "market_size", "col": "score_market_size", "positive": "Strong Demand",   "risk": "Weak Demand"},
-    {"key": "openness",    "col": "score_openness",    "positive": "Open Market",      "risk": "Brand Barrier"},
-    {"key": "stability",   "col": "score_stability",   "positive": "Stable Structure", "risk": "Unstable Structure"},
-]
-SIG_PCT_LOW, SIG_PCT_HIGH = 0.25, 0.75
-SIG_MAX_POS, SIG_MAX_RISK = 2, 1
-TIER_THRESHOLDS = [
-    (0.80, "高潜机会类目"), (0.60, "较高机会类目"), (0.40, "中性观察类目"),
-    (0.20, "谨慎评估类目"), (0.00, "暂不考虑类目"),
-]
-
-
-def assign_tier(scores: pd.Series) -> pd.Series:
-    pct = scores.rank(pct=True)
-    def to_tier(p):
-        for thr, label in TIER_THRESHOLDS:
-            if p >= thr:
-                return label
-        return TIER_THRESHOLDS[-1][1]
-    return pct.apply(to_tier)
-
-
-def compute_signals(df):
-    """Opportunity Signals（百分位法，= 生产 v2 评分引擎 compute_signals 逐字复刻）。
-    对 SIG_DIMS 每维（A/C/M/T，不含 new_product）在全部类目上算 P25/P75：
-      ≥P75 → Positive 候选；≤P25 → Risk 候选。
-    Positive 取分值最高 2 个；Risk 取分值最低（最严）1 个。无候选留空。
-    """
-    cutoffs = {}
-    for d in SIG_DIMS:
-        s = df[d["col"]]
-        cutoffs[d["key"]] = (s.quantile(SIG_PCT_LOW), s.quantile(SIG_PCT_HIGH))
-    pos_out, risk_out = [], []
-    for _, row in df.iterrows():
-        pos, risk = [], []
-        for d in SIG_DIMS:
-            v = row[d["col"]]
-            lo, hi = cutoffs[d["key"]]
-            if v >= hi:
-                pos.append((v, d["positive"]))
-            if v <= lo:
-                risk.append((v, d["risk"]))
-        pos_labels = [lab for _, lab in sorted(pos, reverse=True)[:SIG_MAX_POS]]
-        risk_labels = [lab for _, lab in sorted(risk)[:SIG_MAX_RISK]]
-        pos_out.append(" + ".join(pos_labels) if pos_labels else None)
-        risk_out.append(" + ".join(risk_labels) if risk_labels else None)
-    out = df.copy()
-    out["positive_signals"] = pos_out
-    out["risk_signal"] = risk_out
-    return out
+# 新品成长（Bonus）单独标签配色 — 与优势/约束区分（蓝紫系）
+BONUS_BG, BONUS_FG = "#eef2ff", "#4338ca"
 
 
 def _sig_chips(s, bg, fg):
@@ -132,26 +74,38 @@ def _sig_chips(s, bg, fg):
         for l in str(s).split(" + "))
 
 
+def _bonus_chip(v):
+    """新品Bonus 数值 → 「新品成长」chip：纯文字等级 较强 / 中等 / 无（不带数字）。
+    阈值兼容当前 bonus_c 取值 6/3/0：>=6→较强 / >=2→中等 / else 无。"""
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        v = 0.0
+    if v >= 6:
+        label = t("较强", "Strong")
+    elif v >= 2:
+        label = t("中等", "Medium")
+    else:
+        return "<span style='color:#c2c8cf;'>—</span>"
+    return (f"<span style='background:{BONUS_BG}; color:{BONUS_FG}; border-radius:10px; "
+            f"padding:2px 9px; margin-right:5px; font-size:0.82rem; white-space:nowrap;'>{label}</span>")
+
+
 @st.cache_data
 def load_categories():
-    """从 category_summary 读评分；优先级类型(Tier) + Opportunity Signals 现算（CSV 后端无此列）。"""
+    """从 db 读方案C（*_c）评分结果（默认权重，不跟随综合评分页滑块）"""
     conn = connect_demo()
     df = pd.read_sql(
-        "SELECT category, composite_score, "
-        "score_market_size, score_openness, score_new_product, "
-        "score_momentum, score_stability, est_monthly_gmv "
+        "SELECT category, composite_score_c, tier_c, "
+        "positive_signals_c, risk_signal_c, bonus_c, "
+        "score_market_size_c, score_openness_c, score_stability_c "
         "FROM category_summary "
         "WHERE COALESCE(is_subcategory,0)=0 "
-        "  AND composite_score IS NOT NULL "
-        "ORDER BY composite_score DESC",
+        "  AND composite_score_c IS NOT NULL "
+        "ORDER BY composite_score_c DESC",
         conn,
     )
-    if df.empty:
-        return df
-    # 优先级类型(Tier)：与综合评分页同口径，从 composite_score 百分位重算（避免 CSV 旧 tier 名）
-    df["tier"] = assign_tier(df["composite_score"])
-    # Opportunity Signals：百分位法 P25/P75 现算（= 生产 v2 评分引擎算法，非造数据）
-    df = compute_signals(df)
+    conn.close()
     return df
 
 
@@ -171,22 +125,25 @@ def _is_bad_brand(nb):
 
 
 # ---------------------------------------------------------------
-# 模块 1：重点 ASIN（全窗口去重池 + 品牌清洗）
+# 模块 1：重点 ASIN（全窗口去重池 + 品牌清洗）— 读 asin_daily，与评分口径无关，保持原逻辑
 # ---------------------------------------------------------------
+
+
 CLIMB_MIN = 15        # BS 榜内爬升达到此名次差才算"上升"
 
 
 @st.cache_data
 def compute_top_opportunity_asins(category, lang, top_n=10):
     """重点 ASIN（上升势头清单）：三路信号 + 关注理由。返回 (Top N 表, 已排除品牌分组列表)。
-    lang 仅用于缓存分桶（让 @st.cache_data 对中/英各缓存一份），使语言切换后 reason 文案重算；
-    函数体不直接使用它——reason 里的 t() 仍读全局 session，与调用时传入的 lang 一致。"""
+    信号：① 新品冲入畅销榜(NR→BS)；② BS 榜内排名爬升；③ MS→BS（飙升榜先现、后冲进 BS）。均剔 Amazon 自营。
+    lang 仅用于缓存分桶（让 @st.cache_data 对中/英各缓存一份），使语言切换后 reason 文案重算。"""
     conn = connect_demo()
     rows = pd.read_sql(
         "SELECT date, list_type, rank, brand, asin, price_low, review_count, rate, "
         "product_url, pct_chg_sales_rank FROM asin_daily "
         "WHERE category=? AND brand IS NOT NULL",
         conn, params=(category,))
+    conn.close()
     if rows.empty:
         return None, []
     rows["date"] = pd.to_datetime(rows["date"])
@@ -200,7 +157,6 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
     ms = rows[rows["list_type"] == "movers_shakers"]
     if bs.empty:
         return None, []
-    # 排除集：仅 Amazon 第一方族（第三方进不去）。
     rep = rows.groupby("brand_norm")["brand"].agg(lambda s: s.value_counts().index[0])
     blocked = set(AMAZON_BRANDS)
     amazon_present = sorted((rep[nb] for nb in blocked if nb in rep.index),
@@ -218,7 +174,7 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
     nr_first = nr.groupby("asin")["date"].min()
     for a in bs_first.index.intersection(nr_first.index):
         if a in latest.index and (bs_first[a] - nr_first[a]).days > 0:
-            sigs.append((a, 0, 0.0, t("🚀 NR榜冲进BS榜", "🚀 NR → BS bestseller")))
+            sigs.append((a, 0, 0.0, t("🚀 NR榜冲进BS榜", "🚀 NR → BS")))
     # ② BS 榜内排名爬升（首现名次 − 最新名次 ≥ CLIMB_MIN）
     bs_pool = bs[~bs["brand_norm"].isin(blocked)]
     for a, g in bs_pool.groupby("asin"):
@@ -234,11 +190,10 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
                          t(f"⬆️ BS 榜内排名爬升{climb}名（{r0}→{r1}）",
                            f"⬆️ Climbed {climb} spots within BS ({r0}→{r1})")))
     # ③ MS→BS：MS 榜首现日 严格早于 BS 榜首现日（曾在飙升榜出现、之后冲进 BS）。与 ① 同构。
-    #   不用 MS 榜内提升率%——该值由起点排名深度主导、不反映持续势头（同步生产 v2 决策10）。
     ms_first = ms.groupby("asin")["date"].min()
     for a in bs_first.index.intersection(ms_first.index):
         if a in latest.index and (bs_first[a] - ms_first[a]).days > 0:
-            sigs.append((a, 2, 0.0, t("📈 MS榜冲进BS榜", "📈 MS → BS bestseller")))
+            sigs.append((a, 2, 0.0, t("📈 MS榜冲进BS榜", "📈 MS → BS")))
     if not sigs:
         return None, excluded_groups
 
@@ -247,9 +202,8 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
     agg = sdf.groupby("asin", sort=False).agg(
         prio=("prio", "min"),                     # 主信号（多信号取最高优先级）
         score=("score", "first"),                 # 已排序：first = 主信号里幅度最大
-        reason=("reason", lambda s: "<br>".join(s)),  # 多信号合并理由：逐条换行（HTML 表格渲染）
+        reason=("reason", lambda s: " · ".join(s)),   # 多信号合并理由
     )
-    # 三信号「平衡」选取 top_n
     nr_idx = list(agg[agg["prio"] == 0].sort_values("score", ascending=False).index)
     bs_idx = list(agg[agg["prio"] == 1].sort_values("score", ascending=False).index)
     ms_idx = list(agg[agg["prio"] == 2].sort_values("score", ascending=False).index)
@@ -260,7 +214,6 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
             picks.append(ms_idx[mi]); mi += 1
         if len(picks) < top_n and bi < len(bs_idx):
             picks.append(bs_idx[bi]); bi += 1
-    # 选取是平衡的；但显示按信号分组（NR→BS → BS爬升 → MS→BS），同组按幅度从大到小，不交叉
     sel = agg.loc[picks].sort_values(["prio", "score"], ascending=[True, False])
     out = sel.join(
         latest[["brand", "price_low", "review_count", "rate", "product_url"]]).reset_index()
@@ -268,8 +221,10 @@ def compute_top_opportunity_asins(category, lang, top_n=10):
 
 
 # ---------------------------------------------------------------
-# 模块 2：价位分布（三榜 BS/NR/MS 去重池，等比价位段；纯描述不判机会）
+# 模块 2：价位分布（三榜 BS/NR/MS 去重池，等比价位段；纯描述不判机会）— 读 asin_daily，保持原逻辑
 # ---------------------------------------------------------------
+
+
 @st.cache_data
 def compute_price_distribution(category):
     """价位分布（三榜 BS/NR/MS 去重池，等比价位段）：返回各段 产品占比 + 销量占比 DataFrame 或 None。"""
@@ -279,11 +234,11 @@ def compute_price_distribution(category):
         "WHERE category=? AND list_type IN ('best_seller','new_release','movers_shakers') "
         "  AND price_low IS NOT NULL AND price_low > 0 AND review_count IS NOT NULL",
         conn, params=(category,))
+    conn.close()
     if rows.empty:
         return None
     rows["date"] = pd.to_datetime(rows["date"])
     snap = rows.sort_values("date").groupby("asin", as_index=False).tail(1).copy()
-    # 分箱前两端去极值——剔除价格 < P5 与 > P95 的极端品
     n_total = len(snap)
     p_lo = float(snap["price_low"].quantile(0.05))
     p_hi = float(snap["price_low"].quantile(0.95))
@@ -291,7 +246,6 @@ def compute_price_distribution(category):
     n_excluded = n_total - len(snap)
     if len(snap) < 10:          # 去极值后样本过少则不分析
         return None
-    # 等比(log 等宽)分箱：按「倍数」把价格切成 N 段
     lo, hi = float(snap["price_low"].min()), float(snap["price_low"].max())
     if not (hi > lo > 0):
         return None
@@ -314,7 +268,7 @@ def compute_price_distribution(category):
     grouped["price_range"] = grouped.apply(
         lambda r: f"${r['price_min']:.2f} ~ ${r['price_max']:.2f}", axis=1)
     out = grouped[["band", "price_range", "asin_pct", "review_pct"]]
-    out.attrs["n_excluded"] = int(n_excluded)   # 两端去极值剔除的极端品数（页面提示用）
+    out.attrs["n_excluded"] = int(n_excluded)
     out.attrs["p_lo"] = p_lo
     out.attrs["p_hi"] = p_hi
     return out
@@ -323,7 +277,8 @@ def compute_price_distribution(category):
 # -----------------------------------------------------------------------
 # 页面
 # -----------------------------------------------------------------------
-# 本页字号微调（覆盖 _styles.py 默认 chart_title 0.92rem / metric value 默认 ~2rem）
+# set_page_config / inject_global_style / app_header 已统一由 app.py（st.navigation 入口）处理
+
 st.markdown(
     """
     <style>
@@ -353,13 +308,14 @@ page_title(t("行动指引", "Action Playbook"))
 
 df = load_categories()
 if df.empty:
-    st.error(t("category_summary 没有评分数据", "No scoring data in category_summary"))
+    st.error(t("db.category_summary 没有 *_c评分数据，请先运行 v3 评分引擎写入 *_c 列",
+               "No Plan-C (*_c) scoring data in db.category_summary — run the v3 scoring engine first"))
     st.stop()
 
 st.markdown(
     "<div style='color:#6b7280; font-size:0.85rem; margin: 4px 0 16px 0;'>"
-    + t("选择一个类目，查看其优先级类型、优势/约束信号、价格带参考，以及可切入的重点 ASIN。结果基于默认权重生成。",
-        "Pick a category to see its priority type, strength/constraint signals, price-band reference, and entry-worthy ASINs. "
+    + t("选择一个类目，查看其优先级类型、优势/约束信号、新品成长、价格带参考，以及可切入的重点 ASIN。结果基于默认权重生成。",
+        "Pick a category to see its priority type, strength/constraint signals, new-product growth, price-band reference, and entry-worthy ASINs. "
         "Results are based on the default weights.")
     + "</div>",
     unsafe_allow_html=True,
@@ -367,35 +323,52 @@ st.markdown(
 
 # 类目选择器
 cats = df["category"].tolist()
-selected = st.selectbox(t("🔍 选择类目", "🔍 Select category"), cats, key="action_guide_cat")
+selected = st.selectbox(t("🔍 选择类目", "🔍 Select category"), cats, key="action_guide_cat_c")
 row = df[df["category"] == selected].iloc[0]
 
-# 排名（按综合机会分在全部评分类目中的名次，替代原 Tier 等级）
+# 排名（按方案C 综合机会分在全部评分类目中的名次）
 n_cats = len(df)
-ranks = df["composite_score"].rank(ascending=False, method="min")
+ranks = df["composite_score_c"].rank(ascending=False, method="min")
 rank_pos = int(ranks[df["category"] == selected].iloc[0])
 
-# 类目摘要卡（3 metric）：综合机会分 / 排名 / 综合优先级(Overall Rating=Tier)
+# 类目摘要卡（3 metric）：综合机会分 / 排名 / 综合优先级(Overall Rating=Tier_c)
 c1, c2, c3 = st.columns(3)
-c1.metric(t("综合机会分", "Composite Score"), f"{row['composite_score']:.3f}")
+c1.metric(t("综合机会分", "Composite Score"), f"{row['composite_score_c']:.1f}")
 c2.metric(t("排名", "Rank"), f"#{rank_pos} / {n_cats}",
           help=t("按综合机会分在全部评分类目中的名次",
                  "Rank by opportunity score among all scored categories"))
-c3.metric(t("优先级类型", "Priority Type"), TIER_LABEL.get(row["tier"], row["tier"]),
+c3.metric(t("优先级类型", "Priority Type"), TIER_LABEL.get(row["tier_c"], row["tier_c"]),
           help=t("综合分 5 档优先级（百分位）", "5-level priority tier by composite percentile"))
 
-# Opportunity Signals：该类目相对优势/约束 chip（结构事实，不随评分页权重变）
+# Opportunity Signals：该类目相对优势/约束 chip（3 维）+ 新品成长（Bonus 单独标签）
 st.markdown(
     "<div style='display:flex; gap:28px; align-items:center; flex-wrap:wrap; margin:12px 0 4px;'>"
     f"<div><span style='font-size:0.82rem; color:#6b7280; font-weight:600;'>"
     f"{t('优势信号', 'Top Strengths')}</span>&nbsp;&nbsp;"
-    f"{_sig_chips(row['positive_signals'], STRENGTH_BG, STRENGTH_FG)}</div>"
+    f"{_sig_chips(row['positive_signals_c'], STRENGTH_BG, STRENGTH_FG)}</div>"
     f"<div><span style='font-size:0.82rem; color:#6b7280; font-weight:600;'>"
     f"{t('约束信号', 'Key Constraint')}</span>&nbsp;&nbsp;"
-    f"{_sig_chips(row['risk_signal'], CONSTRAINT_BG, CONSTRAINT_FG)}</div>"
+    f"{_sig_chips(row['risk_signal_c'], CONSTRAINT_BG, CONSTRAINT_FG)}</div>"
+    f"<div><span style='font-size:0.82rem; color:#6b7280; font-weight:600;'>"
+    f"{t('新品成长', 'New-Product Growth')}</span>&nbsp;&nbsp;"
+    f"{_bonus_chip(row['bonus_c'])}</div>"
     "</div>",
     unsafe_allow_html=True,
 )
+# 主因归因（修「档位与信号背离」可读性）：综合机会分主要由哪一维拉动（默认权重 0.40/0.35/0.25）
+_dw_c = {"market_size": 0.40, "openness": 0.35, "stability": 0.25}   # = scoring_config_C.yaml 默认
+_dim_name_c = {"market_size": t("市场吸引力", "Market Appeal"),
+               "openness": t("市场开放度", "Market Openness"),
+               "stability": t("结构稳定", "Structural Stability")}
+_contrib_c = {d: (row[f"score_{d}_c"] or 0) * w for d, w in _dw_c.items()}
+_main_c = max(_contrib_c, key=_contrib_c.get)
+st.markdown(
+    "<div style='font-size:0.78rem; color:#9ca3af; margin:2px 0 6px;'>"
+    + t("综合机会分主要由", "Composite mainly driven by")
+    + f"「<b>{_dim_name_c[_main_c]}</b>」" + t("拉动", "")
+    + "</div>", unsafe_allow_html=True)
+# 注：优势/约束信号 = 3 维（需求/开放度/结构稳定）相对事实；新品成长 = 新品Bonus（S/M/—），
+#    单独成标签、不并入三维信号。口径说明见「指标解释」文档，页面不重复。
 st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------
@@ -411,13 +384,11 @@ if bands is None or bands.empty:
 else:
     lbl_a = t("ASIN数量占比", "ASIN share")
     lbl_r = t("评论数占比", "Review share")
-    # 段标签 = 价位段名 + 价格范围（如「低价段: $6.98 ~ $14.38」），随类目变；价位段名放左侧
     _range_map = dict(zip(bands["band"], bands["price_range"]))
     present = [b for b in BAND_ORDER if b in set(bands["band"])]
     _bv = bands.set_index("band")
     asin_v = [float(_bv.loc[b, "asin_pct"]) for b in present]
     rev_v = [float(_bv.loc[b, "review_pct"]) for b in present]
-    # 配色：低→高 浅→深蓝；浅段深字、深段白字
     BAND_SEQ = ["#dbeafe", "#93c5fd", "#60a5fa", "#3b82f6", "#1e40af"]
     BAND_TXT = ["#1f2937", "#1f2937", "#1f2937", "#ffffff", "#ffffff"]
     _idx = {b: i for i, b in enumerate(BAND_ORDER)}
@@ -429,7 +400,6 @@ else:
     x_sw = -1.31   # 左侧色块 x（紧贴标签左缘）
     col_r = -0.80  # 标签右对齐边界（紧贴引导线，消除图例↔引导线空隙）
     fig = go.Figure()
-    # 两根 100% 堆积条（低价格段在最底→高价格段在最顶）；百分比直接标在各段内（不缩字、不转向）
     for i, b in enumerate(present):
         ci = _idx[b]
         fig.add_bar(
@@ -444,7 +414,6 @@ else:
         )
     fig.update_layout(barmode="stack")
 
-    # 两条之间：各价位段边界用点线相连（看同一段在产品/需求两侧占比的此消彼长）
     for k in range(len(present) + 1):
         fig.add_scatter(
             x=[xL + halfw, xR - halfw], y=[cumL[k], cumR[k]],
@@ -452,7 +421,6 @@ else:
             hoverinfo="skip", showlegend=False,
         )
 
-    # 左侧图例列：色块（最左成列）+ 价位段名(价格范围)（右对齐）+ 引导点线 → 左条各段中心
     for i, b in enumerate(present):
         ci = _idx[b]
         yc = (cumL[i] + cumL[i + 1]) / 2
@@ -495,7 +463,7 @@ st.caption(t(
     "正在「上升」、值得关注的产品（已剔 Amazon 自营族）。三类上升信号平衡选取："
     "🚀 NR榜冲进BS榜 · ⬆️ BS榜内排名爬升 · 📈 MS榜冲进BS榜。",
     "Products on the rise (Amazon family excluded), balanced across three signals: "
-    "🚀 NR → BS bestseller · ⬆️ climbing within BS · 📈 MS → BS bestseller."))
+    "🚀 NR → BS · ⬆️ climbing within BS · 📈 MS → BS."))
 top_df, excluded_brands = compute_top_opportunity_asins(selected, get_lang(), top_n=10)
 if excluded_brands:
     st.caption(t("注：已排除 Amazon 品牌族：", "Note: excluded Amazon family: ")
@@ -504,49 +472,27 @@ if top_df is None or top_df.empty:
     st.warning(t("窗口内没有符合三类上升信号的非头部 ASIN",
                  "No non-leader ASINs matched the three rising signals in this window"))
 else:
-    # 展示表：关注理由「多信号逐条换行」需要单元格内换行，st.dataframe 不支持 →
-    #   改用 HTML 表格渲染（reason 已用 <br> 连接），并保留可点 Amazon 链接。
+    display = top_df[["reason", "brand", "asin", "price_low", "review_count", "rate", "product_url"]].copy()
     col_reason = t("关注理由", "Why watch")
     col_brand = t("品牌", "Brand")
     col_price = t("价格 ($)", "Price ($)")
     col_reviews = t("评论数", "Reviews")
     col_rating = t("评分", "Rating")
     col_link = t("Amazon 链接", "Amazon Link")
-    _open = t("打开", "Open")
-
-    _th = ("padding:8px 10px; text-align:left; font-weight:600; color:#374151; "
-           "border-bottom:2px solid #e5e7eb; white-space:nowrap;")
-    _td = "padding:8px 10px; border-bottom:1px solid #f1f5f9; vertical-align:top;"
-    _num = lambda v, f: (f.format(v) if pd.notna(v) else "—")
-    _rows = ""
-    for _, r in top_df.iterrows():
-        _url = r["product_url"] if pd.notna(r.get("product_url")) else ""
-        _link = (f"<a href='{_url}' target='_blank' style='color:#2563eb; text-decoration:none;'>🔗 {_open}</a>"
-                 if _url else "—")
-        _rows += (
-            "<tr>"
-            f"<td style='{_td} line-height:1.7;'>{r['reason']}</td>"
-            f"<td style='{_td} white-space:nowrap;'>{r['brand']}</td>"
-            f"<td style='{_td} white-space:nowrap; color:#6b7280;'>{r['asin']}</td>"
-            f"<td style='{_td} text-align:right; white-space:nowrap;'>{_num(r['price_low'], '${:.2f}')}</td>"
-            f"<td style='{_td} text-align:right;'>{_num(r['review_count'], '{:.0f}')}</td>"
-            f"<td style='{_td} text-align:right;'>{_num(r['rate'], '{:.1f}')}</td>"
-            f"<td style='{_td} white-space:nowrap;'>{_link}</td>"
-            "</tr>"
-        )
-    _html = (
-        "<div style='overflow-x:auto;'>"
-        "<table style='border-collapse:collapse; width:100%; font-size:0.88rem;'>"
-        "<thead><tr>"
-        f"<th style='{_th}'>{col_reason}</th>"
-        f"<th style='{_th}'>{col_brand}</th>"
-        f"<th style='{_th}'>ASIN</th>"
-        f"<th style='{_th} text-align:right;'>{col_price}</th>"
-        f"<th style='{_th} text-align:right;'>{col_reviews}</th>"
-        f"<th style='{_th} text-align:right;'>{col_rating}</th>"
-        f"<th style='{_th}'>{col_link}</th>"
-        "</tr></thead><tbody>"
-        + _rows +
-        "</tbody></table></div>"
+    display.columns = [col_reason, col_brand, "ASIN", col_price, col_reviews, col_rating, col_link]
+    st.dataframe(
+        display,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            col_reason:   st.column_config.TextColumn(width="large",
+                help=t("该 ASIN 入选的上升信号（可能多条）", "Rising signal(s) this ASIN matched")),
+            col_price:    st.column_config.NumberColumn(format="$%.2f"),
+            col_reviews:  st.column_config.NumberColumn(format="%d"),
+            col_rating:   st.column_config.NumberColumn(format="%.1f"),
+            col_link:     st.column_config.LinkColumn(display_text=t("🔗 打开", "🔗 Open")),
+        },
     )
-    st.markdown(_html, unsafe_allow_html=True)
+
+# 注：方案C 摘要 = 优先级(Tier_c) + 3 维优势/约束信号 + 新品成长(Bonus) 单独标签；
+#    价位带参考 + 重点 ASIN 读 asin_daily、与评分口径无关，保持原逻辑。

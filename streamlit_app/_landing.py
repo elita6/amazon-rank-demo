@@ -15,6 +15,10 @@
 #                 （动能/新品空间不参与信号），信号名 需求居前·居后 / 市场开放·品牌壁垒 /
 #                 波动较小·较大；5 档英文 Top/High → High-potential/Higher；
 #                 头部品牌竞争描述精简为「CR3 集中度+ 单类目品牌下钻」。
+#   - 2026-07-04：同步生产 v3 口径 —— 评分从「5 维模型」改为「3 维基础分（市场吸引力/市场开放度/
+#                 结构稳定）+ 新品成长分」，综合机会分 = 基础分 + 新品成长分（去 momentum / new_product 维度）；
+#                 第 2 页「头部品牌竞争」→「竞争结构」（品牌需求 CR3 × 商品需求 CR10 竞争象限 + 新牌友好度）；
+#                 数据流「评分建模」步与方法论「评分系统」卡同步 3 维基础分 + 新品成长分 表述。类目名不写死。
 
 import sys
 from pathlib import Path
@@ -41,9 +45,9 @@ PAGES = [
     {
         "n": 2,
         "icon": "🏆",
-        "title": t("头部品牌竞争", "Head-Brand Competition"),
-        "desc": t("CR3 集中度+ 单类目品牌下钻",
-                  "CR3 concentration + single-category brand drill-down"),
+        "title": t("竞争结构", "Competitive Structure"),
+        "desc": t("品牌需求 CR3 × 商品需求 CR10 竞争象限 + 新牌友好度 + 单类目品牌下钻",
+                  "Brand demand CR3 × product demand CR10 quadrant + new-brand friendliness + single-category brand drill-down"),
         "demo": True,
         "url": "/brand-competition",
     },
@@ -60,8 +64,8 @@ PAGES = [
         "n": 4,
         "icon": "🎯",
         "title": t("类目综合评分", "Composite Score"),
-        "desc": t("评分系统：5 维模型 + 权重偏好动态调整 + 优先级类型分布",
-                  "Scoring system: 5-factor model + dynamic weight preferences + priority-type distribution"),
+        "desc": t("评分系统：3 维基础分 + 新品成长分 + 权重偏好动态调整 + 优先级类型分布",
+                  "Scoring system: 3-factor base score + new-product growth + dynamic weight preferences + priority-type distribution"),
         "demo": True,
         "url": "/composite-score",
     },
@@ -79,7 +83,7 @@ PAGES = [
 DATA_FLOW = [
     ("📥", t("数据采集", "Data Collection"),   t("BS / NR / MS 榜单", "BS / NR / MS rankings")),
     ("💾", t("数据入库", "Data Ingestion"),   t("解析清洗 + 日度指标聚合", "Parsing & cleaning + daily metric aggregation")),
-    ("⚖️", t("评分建模", "Scoring & Modeling"),   t("5 维评分 + 双层加权 + 优先级类型 + 优势/约束信号", "5-factor scoring + two-layer weighting + priority tiers + opportunity signals")),
+    ("⚖️", t("评分建模", "Scoring & Modeling"),   t("3 维基础分 + 新品成长分 + 优先级类型 + 优势/约束信号", "3-factor base score + new-product growth + priority tiers + opportunity signals")),
     ("📈", "Dashboard",   t("可视化 + 行动指引", "Visualization + action playbook")),
 ]
 
@@ -194,9 +198,13 @@ with m1:
         + t("评分系统", "Scoring System") + "</div>"
         "<div style='font-size:0.85rem; color:#475569; line-height:1.7;'>"
         + t(
-            "<b>5 维模型</b>：市场吸引力 / 开放度 / 新品空间 / 增长动能 / 结构稳定<br><br>"
+            "<b>综合得分 = 3 维基础分 + 新品成长分</b><br><br>"
+            "<b>3 维基础分</b>：市场吸引力 / 市场开放度 / 结构稳定<br>"
+            "<b>新品成长分</b>：新品成长势能<br><br>"
             "<b>权重调整</b>：根据业务偏好调整维度权重",
-            "<b>5-factor model</b>: Market Attractiveness / Openness / New-Product Room / Momentum / Stability<br><br>"
+            "<b>Composite = 3-factor base score + New-Product Growth</b><br><br>"
+            "<b>3-factor base score</b>: Market Attractiveness / Market Openness / Stability<br>"
+            "<b>New-Product Growth</b>: new-product growth momentum<br><br>"
             "<b>Weight adjustment</b>: adjust factor weights by business preference",
         )
         + "</div></div>",

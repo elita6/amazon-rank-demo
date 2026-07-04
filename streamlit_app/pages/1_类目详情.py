@@ -1,21 +1,58 @@
 # streamlit_app/pages/1_类目详情.py
-# 更新日期：2026-06-28
-# 用途：类目详情（Demo 版，对齐生产 v2）— 统一聚合口径后的描述性分析页。
+# 更新日期：2026-07-04
+# 用途：类目详情（Demo 版，从 v3 移植）— 统一聚合口径后的描述性分析页。
+# Demo 适配：数据源 data/amazon.db → data/*.csv（_demo_data.connect_demo in-memory sqlite）；
+#   类目/品牌/ASIN 已匿名化（Category A~R / Brand_xxx）；CAT_SHORT/TEXT_POS 对 demo 类目无映射，
+#   自动回退原名/默认方位，不影响逻辑；黑名单类目在 demo 数据生成时已剔除，去掉 excluded_categories。
+# 用途（原）：类目详情（精简新版）— 统一聚合口径后的描述性分析页。原页 类目详情.py 保留对照。
 #       结构：1.1 类目概览（表）+ 1.2 类目画像（基础分布 + 交叉分析）
-# 启动命令：streamlit run streamlit_app/产品概览.py
-# 与生产 v2 差异：
-#   - 数据源从 data/amazon.db 改为 data/*.csv（_demo_data.connect_demo in-memory sqlite）
-#   - 类目/品牌/ASIN 已匿名化（Category A~R / Brand_xxx）；CAT_SHORT/TEXT_POS 对 demo 类目无映射，
-#     自动回退原名/默认方位，不影响逻辑
-# 主要改动：
-#   - 2026-06-28：从生产 v2 类目详情.py 移植（去「三榜合并」默认 BS；价格/评论 winsor_mean；
-#       需求增量/存量指数；箱线图不去极值；品牌归一化去重；象限图；全图 insight_box 数据驱动解读）
-#   - 2026-06-29：对齐生产 v2 本轮改动——
-#       1) 汇总表「平均价格」前补「平均累计评论数」列（=最新一天快照 winsor 均值 latest_review_repr）；
-#       2) 表注改「需求累积量指数=平均累计评论数×平均价格（评论按最新值）」+ 加「需求指标仅作大致参考」行；
-#       3) 箱型图「评论数分布」→「累计评论数分布」，数据改每类目最新一天快照（与平均累计评论同口径），价格仍全窗口；
-#       4) 象限图换轴 X=需求存量(体量)/Y=加速度(增量/存量)，去四象限名，中位虚线端点写方向词（快/慢/小/大），
-#          解读改纯位置描述（体量多·增速快 等），图下加「存量/增速为近似代理、非真实销量」注。
+# 启动命令：streamlit run v2/streamlit_app/app.py
+# 主要改动（相对 类目详情.py）：
+#   - 2026-06-29（象限图换轴）：X/Y 由「增量×存量」(两轴秩相关 0.851、伪二维冗余) 改为
+#       「需求存量[体量] × 加速度[增速=增量/存量]」(秩相关仅 0.046、近正交)；去掉象限名，
+#       去象限角标，改在两条轴两端写方向词（X 左小右大、Y 下慢上快）；解读用 体量 多/少 ×
+#       增速 快/慢；图下加注「需求存量、增速是近似代理，非真实
+#       销量/GMV，仅做大致参考」。象限 vs 行动指引的差异属「单维需求 vs 5维综合」视角差，非 bug。
+#   - 2026-06-29（汇总表/箱型图）：类目汇总表在「平均价格」前补「平均累计评论数」列
+#       （=需求累积量指数的评论因子，最新一天快照 winsor 均值）；表注改为
+#       「需求累积量指数：平均累计评论数 × 平均价格（评论数按最新值取值）」；
+#       箱型图「评论数分布」更名「累计评论数分布」（review_count 即累计型）。
+#   - 2026-06-29（箱型图口径统一）：累计评论数分布改为「每类目最新一天快照」（每 ASIN 一个
+#       当前值），与汇总表「平均累计评论数」同口径——消除全窗口对同一 ASIN 按在榜天数重复
+#       计数/加权（伪重复，实测均值偏高 ~11%）。价格分布仍用全窗口（价格非累计型，无此问题）。
+#   - 2026-06-29：排除子类目时叠加排除评分黑名单类目（_aggregate.excluded_categories，
+#       当前 Amazon Devices——自营/已 pass/常为极端值），展示与评分引擎口径一致。
+#   - 2026-06-29（象限图）：删「● 交叉分析」标题与「基于 BS 口径」注；图下加「坐标轴=中位线
+#       (N 类目中间水平)」小注（0.70rem 同表注）；解读改为每象限只列最典型 2–3 个类目
+#       （剔除贴近中位线、归属不稳者；按离两线都远=角落代表性排序），并补全「稳态成熟」象限。
+#   - 2026-06-28：象限图「冷门小盘」英文译名纠错 Large-but-Cold → Small & Cold
+#                （large 与「小盘」矛盾，属误译；另三象限英文核对无误，不动）
+#   - 2026-06-27 新建：落地「类目详情口径」决策——
+#       1) 去掉「三榜合并」按钮，默认口径 = BS（三榜是三个总体，混池无干净业务含义）
+#       2) 价格/评论/评分 列统一决策1 缩尾均值（winsor_mean，去极值后平均）
+#       3) 基础分布图去掉单边 P95 clip（决策1：分布图只汇总不缩尾，展示全貌）
+#   - 2026-06-28（解读复查加强）：汇总表解读"只报最高第1名"→改为列前 2–3 名 + 看结构
+#       （历史/近期领头者是否同一、评分极差），象限图本就列各象限成员、保持不动。
+#   - 2026-06-28（补全本页其余图表解读）：类目汇总表 + 类目象限图 下方各加「📊 解读」框
+#       （数据驱动、非 AI，与该图同一份数据现算）。汇总表读需求存量/增量指数、有视频%、平均评分；
+#       象限图读「头部大盘 / 新兴上升 / 冷门小盘」三象限的成员（按中位线划分，与图上虚线一致）。
+#       两张箱线图已有解读，不重复。
+#   - 2026-06-28：价格分布 / 评论数分布两张箱线图下方各加「📊 自动解读」框（数据驱动模板化，
+#       非 AI）。规则：① 白话 3-5 条，按「整体→特殊→关注」思路组织但**不印结构标签词**；
+#       ② 指标用**页面原名**（平均价格 / 评论数），结论可在页面直接核对（平均价格列=winsor_mean，
+#       与解读同数）；③ 跨指标按阅读顺序——价格图只讲价格，评论图才引入「越贵评论越薄」
+#       （crosslink_neg 算出反向关系才输出）；④ 结论挂数字可追溯（排名/倍数/极值）；
+#       ⑤ 读图说明（怎么看箱线图）不内联，留给后续「使用指南」页统一讲。
+#       复用 _styles.insight_box + _aggregate.distribution_insights/crosslink_neg/fmt_compact（可推广全站）。
+#       4) 品牌数改归一化去重（_brands.normalize_brand：Sony/SONY/Sony Inc.算1个）
+#       5) has_video 占比维持「0/1 求均值=占比型」（决策1 占比型字段，按行汇总）
+#   - 2026-06-27 市场规模口径重构（去美元、统一配方）：
+#       去掉「预估月销售额」($，依赖第三方 1.5% 转化率) 及旧 Σ 版流量/深度；
+#       改两个对称需求指数（_aggregate，固定术语）：
+#         需求增量指数(近期) = 评论增量代表值 × 均价(去极值)
+#         需求存量指数(历史) = 最新累计评论(去极值) × 均价(去极值)
+#       最新累计评论 = 最新一天快照 winsor_mean（累计型取最新，非跨天平均）；该列不单独展示，
+#       仅作存量指数内部因子；象限图 X=增量(近期) × Y=存量(历史)；NR/MS 视图隐藏指数列
 
 import sys
 from pathlib import Path
@@ -78,6 +115,7 @@ def load_data():
         "SELECT category, n_subcategories, is_subcategory FROM category_summary",
         conn,
     )
+    conn.close()
     # 品牌归一化（去重口径统一）：Sony/SONY/Sony Inc. 归为同一品牌。
     # 在去重值上算映射再回填，避免逐行重复 regex。
     uniq = pd.Series(asin["brand"].dropna().unique())
@@ -122,10 +160,10 @@ page_title(t("类目详情", "Category Detail"))
 
 asin, summary = load_data()
 
-# 默认排除子类目
-sub_set = set(summary[summary["is_subcategory"] == 1]["category"].tolist())
-asin = asin[~asin["category"].isin(sub_set)]
-summary = summary[summary["is_subcategory"] != 1].copy()
+# 默认排除子类目（Demo 数据生成时已剔除黑名单类目，无需再调 excluded_categories）
+drop_set = set(summary[summary["is_subcategory"] == 1]["category"].tolist())
+asin = asin[~asin["category"].isin(drop_set)]
+summary = summary[~summary["category"].isin(drop_set)].copy()
 main_cats = summary["category"].tolist()
 
 # 需求增量指数(近期) / 需求存量指数(历史)（BS 单口径，预先算好）
@@ -347,6 +385,7 @@ with st.container(border=True):
     )
 
     # 解读：与汇总表同一份 agg_view 现算（当前榜单 + 类目筛选下），指标名沿用表头。
+    #   复查加强：超出"最高"列出前 2–3 名 + 看结构（领头者差异 / 极差），去掉无参照形容。
     _ov = []
     _join = lambda d, c: "、".join(f"<b>{r['category']}</b>" for _, r in d.iterrows())
     if "demand_stock" in agg_view.columns:
@@ -466,7 +505,7 @@ with st.container(border=True):
         if _ri:
             _deep = "、".join(f"<b>{c}</b>" for c, _ in _ri["top_reps"][:2])
             _deep_en = ", ".join(f"<b>{c}</b>" for c, _ in _ri["top_reps"][:2])
-            # 单品评论极值 → 直链该 ASIN 的 Amazon 商品页（Demo 为匿名 ASIN，链接仅示意）
+            # 单品评论极值 → 直链该 ASIN 的 Amazon 商品页（数据来自 US 站）
             _lk = (f"（<a href='https://www.amazon.com/dp/{_ri['tail_id']}' target='_blank'>{t('查看商品','view product')}</a>）"
                    if _ri.get("tail_id") else "")
             _items = [
@@ -486,11 +525,8 @@ with st.container(border=True):
             insight_box(_items)
 
         st.caption(t(
-            "注：箱线图展示原始分布（不去极值）。价格用全窗口全部观测；累计评论取每类目最新一天快照"
-            "（每 ASIN 一个当前值），与汇总表「平均累计评论数」同口径。",
-            "Note: box plots show the raw distribution (no winsorizing). Price uses all observations across "
-            "the full window; cumulative reviews use each category's latest-day snapshot (one current value "
-            "per ASIN), matching the summary table's Avg cumulative reviews.",
+            "注：箱线图展示原始分布（不去极值）。",
+            "Note: box plots show the raw distribution (no winsorizing).",
         ))
 
 
@@ -498,10 +534,10 @@ with st.container(border=True):
 with st.container(border=True):
     # ============================================================
     # 类目象限图（需求存量[体量] × 加速度[增速] 4 象限 — 固定 BS 口径）
-    #   旧版用 增量×存量，两轴秩相关高（伪二维、信息冗余）；改为 存量×加速度后两轴近正交：
-    #   X=体量大小、Y=增速快慢，各答一个问题。加速度=增量/存量=月增评论/累计评论
-    #   （价格约掉、体量中性）。不设象限名；方向词写在两条轴的两端：
-    #   X 轴(体量) 左小右大、Y 轴(增速) 下慢上快。
+    #   旧版用 增量×存量，两轴秩相关 0.851（伪二维、信息冗余）；改为 存量×加速度
+    #   后两轴秩相关仅 0.046（近正交）：X=体量大小、Y=增速快慢，各答一个问题。
+    #   加速度=增量/存量=月增评论/累计评论（价格约掉、体量中性）。不设象限名；
+    #   方向词写在两条轴的两端：X 轴(体量) 左小右大、Y 轴(增速) 下慢上快。
     # ============================================================
     chart_title(t("类目象限图（固定BS口径）", "Category Quadrant Chart (fixed BS basis)"))
     quad = pd.DataFrame({"category": main_cats})
@@ -510,6 +546,17 @@ with st.container(border=True):
     quad = quad.dropna(subset=["inc", "stk"])
     quad["size"] = quad["stk"]                   # X = 体量（需求存量指数）
     quad["speed"] = quad["inc"] / quad["stk"]    # Y = 增速（加速度 = 增量/存量）
+
+    st.markdown(
+        "<div style='font-size: 0.70rem; color: #6b7280; line-height: 1.65; margin-top: 4px;'>"
+        + t(f"坐标轴=中位线（{len(quad)} 类目中间水平）",
+            f"Axes split at the median ({len(quad)} categories' midpoint)")
+        + "<br>"
+        + t("需求存量、增速是近似代理，非真实销量/GMV，仅做大致参考",
+            "Demand stock and growth speed are rough proxies, not real sales/GMV—rough reference only")
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
     if not quad.empty:
         quad["类目短名"] = quad["category"].map(CAT_SHORT).fillna(quad["category"])
@@ -563,7 +610,7 @@ with st.container(border=True):
         y_lo, y_hi = quad["speed"].min(), quad["speed"].max()
         x_range = [max(0, x_lo - (x_hi - x_lo) * 0.10), x_hi + (x_hi - x_lo) * 0.12]
         y_range = [max(0, y_lo - (y_hi - y_lo) * 0.10), y_hi + (y_hi - y_lo) * 0.15]
-        # 方向词写在两条中位虚线（十字）的端点：
+        # 方向词写在两条中位虚线（十字）的端点（参考设计稿）：
         #   竖线(增速) 上端=快、下端=慢（x 对齐 mx）；横线(体量) 左端=小、右端=大（y 对齐 my）。
         _df = dict(size=14, color="#555")
         fig.add_annotation(xref="x", x=mx, yref="paper", y=1.0, yshift=16,
@@ -585,19 +632,8 @@ with st.container(border=True):
         )
         st.plotly_chart(fig, width="stretch")
 
-        st.markdown(
-            "<div style='font-size: 0.70rem; color: #6b7280; line-height: 1.65; margin-top: 4px;'>"
-            + t(f"坐标轴=中位线（{len(quad)} 类目中间水平）",
-                f"Axes split at the median ({len(quad)} categories' midpoint)")
-            + "<br>"
-            + t("需求存量、增速是近似代理，非真实销量/GMV，仅做大致参考",
-                "Demand stock and growth speed are rough proxies, not real sales/GMV—rough reference only")
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-
         # 解读：与象限图同一份 quad + 同一中位虚线（mx=体量中位, my=增速中位）划象限。
-        # 纯位置描述（体量 多/少 × 增速 快/慢）；剔除贴近中位线的类目（归属不稳），
+        # 只说每象限"最典型"的 2–3 个：剔除贴近中位线的类目（归属不稳），
         # 按"离两条线都远"(角落代表性 = 两轴归一偏离的较小者)取前 k。
         _xspan = (quad["size"].max() - quad["size"].min()) or 1
         _yspan = (quad["speed"].max() - quad["speed"].min()) or 1

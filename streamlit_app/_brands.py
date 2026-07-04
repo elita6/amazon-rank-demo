@@ -1,10 +1,12 @@
 # streamlit_app/_brands.py
-# 更新日期：2026-06-28
-# 用途：品牌名归一化（去重口径统一）。供 类目详情 品牌数 / 头部品牌竞争 CR3 等共用，
+# 更新日期：2026-07-04
+# 用途：品牌名归一化（去重口径统一）。供 类目详情 品牌数 / 竞争结构 CR3 等共用，
 #       让 Sony / SONY / Sony Inc. 归为同一品牌。纯规则、不做模糊匹配（不会误并 Sony 和 Sonos）。
-#       （Demo 版：与生产 v2/streamlit_app/_brands.py 同一份纯函数，无外部依赖，逐字移植。）
+#       （Demo 版：与生产 v3/streamlit_app/_brands.py 同一份纯函数，无外部依赖，逐字移植。）
 # 主要改动：
 #   - 2026-06-28 从生产 v2 移植：normalize_brand / build_display_map / brand_breakdown / cr3_pair
+#   - 2026-07-04 同步生产 v3（决策11）：新增 brand_review_crn —— 品牌需求集中度 = 按评论降序
+#       Top-N 品牌的评论占比（openness 品牌腿 + 竞争结构页 X 轴）。纯 pandas，无 core 依赖。
 
 import re
 
@@ -100,3 +102,21 @@ def cr3_pair(df, **kw):
     tot = per["review_sum"].sum()
     demand = top3["review_sum"].sum() / tot if tot > 0 else None
     return round(float(shelf), 3), (round(float(demand), 3) if demand is not None else None)
+
+
+def brand_review_crn(df, n=3, **kw):
+    """决策11 · 品牌需求集中度 CRn = 按**评论降序**前 N 个品牌的评论占比。
+
+    复用 brand_breakdown（每 ASIN 一票、取归一化品牌 + 最新累计评论）。
+    与 cr3_pair[1] 的区别：cr3_pair[1] 取"按 ASIN 数选出的" Top3 的评论占比（供坑位/需求同组对比）；
+    本函数按评论重新排序取 Top-N，是标准的品牌需求 CRn。openness 品牌腿 + 竞争结构页 X 轴用它。
+    评论是销量的代理 —— 未来接入真实销量时，只需把 review_sum 换成 sales，口径不变。
+    """
+    per, total = brand_breakdown(df, **kw)
+    if per is None or total == 0:
+        return None
+    tot = per["review_sum"].sum()
+    if tot <= 0:
+        return None
+    top = per["review_sum"].sort_values(ascending=False).head(n).sum()
+    return round(float(top / tot), 4)

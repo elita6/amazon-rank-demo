@@ -1,91 +1,69 @@
 # streamlit_app/pages/4_类目综合评分.py
-# 更新日期：2026-06-29
-# 用途：类目综合评分（Demo 版，对齐生产 v2 布局）— 横向比较页。
-#       上：优先级类型分布树状图（全宽）；下：左 Top10 机会类目横向条形 + 右 Top3 五维雷达。
-#       侧边栏 4 个权重预设 + 5 维滑块，动态重算综合分 / 优先级类型(Tier) / Flag。
-# 启动命令：streamlit run streamlit_app/产品概览.py
-# 与生产 v2 差异：
-#   - 数据源 data/amazon.db → data/*.csv（connect_demo）；类目已匿名化（Category A~R）
-#   - 默认权重：生产 v2 从 config/scoring_config.yaml 读取；Demo 无 config 目录，直接内联
-#     DEFAULT_WEIGHTS = A0.25 / C0.25 / N0.20 / M0.15 / T0.15（与 v2 dimension_weights 一致）
-# 主要改动：
-#   - 2026-06-29（文案同步生产 v2）：各维度「衡量什么」改为问句式——市场吸引力=有没有市场？/
-#       市场开放度=能不能进入？/新品空间=新品能不能成长？/增长动能=有没有正在上升的产品？/
-#       结构稳定=市场波动性大不大？（中英同步）。不动计算口径。
-#   - 2026-06-28：从生产 v2 pages/4_类目综合评分.py 移植（树状图 + Top10 横向条形 + Top3 雷达；
-#       各项评分说明 expander；权重预设 + 滑块动态重算）
+# 更新日期：2026-07-04
+# Demo 适配：数据源 data/amazon.db → data/*.csv（_demo_data.connect_demo）；类目已匿名化；
+#   无 config 目录 → 默认权重内联（A0.40/C0.35/T0.25），删 yaml 读取；读 *_c 后缀评分列（由 demo CSV 提供）。
+# 原文件：v3/streamlit_app/pages/4_类目综合评分.py（方案C 对照版：3 维基础分 + 新品Bonus）
+# 更新日期（原）：2026-07-03
+# 用途：类目综合评分「方案C 对照版」— 复制自 4_类目综合评分.py，原页一字不动便于 A/B 对照。
+#       方案C 评分口径：3 维基础分 + 新品Bonus（读 DB 的 *_c 后缀列）。
+# 主要改动（相对原页，均为方案C 定制）：
+#   - 2026-07-03（精简版·聚焦得分表）：
+#       ① 删「衡量什么」里的 S+8/M+4 文字标签；新品机会分只显示原始数字 0/3/6；维度说明改直白版。
+#       ② 类目得分表（5 列）：类目|基础分|新品成长分|综合得分|优先级类型；综合得分 = 表内条形
+#          （Styler linear-gradient 背景，长度∝得分、每行颜色=tier_c 色，与优先级色块同套 TIER_COLOR，
+#          数值叠条上），优先级类型 = 纯 tier 色块；因 linear-gradient 用 styler.to_html()+st.markdown 渲染。
+#          随权重实时重算 tier→条色/色块同步变；基础分+新品成长分=综合得分（自洽）。
+#       ③ 删除树状图 / Top10 排名 / Top3 雷达三块旧图（及各自取数与布局），清理 np/px/go import。
+#       ④ 侧栏删「权重总和」metric；「恢复默认」按钮 → 「默认」，样式对齐原页快速预设按钮（1/4 宽、小字号）。
+#   - 2026-07-03（新建·方案C 对照版）：
+#       ① 权重 UI 精简：删除「快速预设」多按钮 + PRESETS 多预设 + active_preset 追踪 + ×badge CSS；
+#          只保留一个「恢复默认」按钮（重置回 scoring_config_v3.yaml dimension_weights，
+#          市场吸引力0.40 / 市场开放度0.35 / 结构稳定0.25）。
+#       ② 滑块 5 维 → 3 维（市场吸引力 / 市场开放度 / 结构稳定）。
+#       ③ 数据源改读 *_c 后缀列（3 维分 + base_score_c + bonus_c + composite_score_c
+#          + tier_c + positive_signals_c / risk_signal_c）。
+#       ④ base + bonus 分开展示：新增「各类目 基础分 / 新品Bonus / 综合机会分」明细表。
+#       ⑤ recompute：基础分 = 3 维分按滑块权重加权 ×100；综合机会分 = 基础分 + bonus_c
+#          （bonus 固定、不随滑块变）；tier 按综合机会分百分位重算。
+#       ⑥ Top3 画像雷达由 5 维 → 3 维（去 new_product / momentum）。
+#   —— 原页 4_类目综合评分.py 的算法/数据源/侧边栏预设逻辑与本页无关，保持不动。
 
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "streamlit_app"))
-from _styles import page_title, chart_title, insight_box
+from _styles import page_title, chart_title
 from _i18n import t
 from _demo_data import connect_demo
 
-# 默认权重（= 生产 v2 config/scoring_config.yaml dimension_weights；Demo 内联，无 yaml 依赖）
-DEFAULT_WEIGHTS = {
-    "score_market_size": 0.25,
-    "score_openness":    0.25,
-    "score_new_product": 0.20,
-    "score_momentum":    0.15,
-    "score_stability":   0.15,
-}
-
+# 方案C 3 维（内部 *_c 列 → 展示名）
 DIM_COLS = [
-    "score_market_size",
-    "score_openness",
-    "score_new_product",
-    "score_momentum",
-    "score_stability",
+    "score_market_size_c",
+    "score_openness_c",
+    "score_stability_c",
 ]
 DIM_LABELS = {
-    "score_market_size":  t("市场吸引力 (A)", "Market Attractiveness (A)"),
-    "score_openness":     t("市场开放度 (C)", "Openness (C)"),
-    "score_new_product":  t("新品空间 (N)", "New-Product Room (N)"),
-    "score_momentum":     t("增长动能 (M)", "Momentum (M)"),
-    "score_stability":    t("结构稳定 (T)", "Stability (T)"),
+    "score_market_size_c": t("市场吸引力 (A)", "Market Attractiveness (A)"),
+    "score_openness_c":    t("市场开放度 (C)", "Openness (C)"),
+    "score_stability_c":   t("结构稳定 (T)", "Stability (T)"),
 }
 DIM_TOOLTIPS = {
-    "score_market_size":  t("偏好需求强、客单价高的吸引力市场", "Favor markets with strong demand and high price points"),
-    "score_openness":     t("偏好更容易进入的市场", "Favor markets that are easier to enter"),
-    "score_new_product":  t("偏好新品成长机会", "Favor new-product growth opportunities"),
-    "score_momentum":     t("偏好趋势和短期爆发", "Favor trend and short-term momentum"),
-    "score_stability":    t("偏好稳定低波动市场", "Favor stable, low-volatility markets"),
+    "score_market_size_c": t("偏好需求强、客单价高的吸引力市场", "Favor markets with strong demand and high price points"),
+    "score_openness_c":    t("偏好更容易进入的市场", "Favor markets that are easier to enter"),
+    "score_stability_c":   t("偏好稳定低波动市场", "Favor stable, low-volatility markets"),
 }
-# 策略偏好预设；"默认" 用 DEFAULT_WEIGHTS 填入
-PRESETS = {
-    "保守型": {"score_market_size": 0.30, "score_openness": 0.20, "score_new_product": 0.10, "score_momentum": 0.10, "score_stability": 0.30},
-    "增长型": {"score_market_size": 0.15, "score_openness": 0.20, "score_new_product": 0.25, "score_momentum": 0.25, "score_stability": 0.15},
-    "爆发型": {"score_market_size": 0.15, "score_openness": 0.20, "score_new_product": 0.25, "score_momentum": 0.35, "score_stability": 0.05},
-    "默认": None,  # 由 load_default_weights() 填入
-}
-PRESET_LABELS = {
-    "保守型": t("保守型", "Safe"),
-    "增长型": t("增长型", "Growth"),
-    "爆发型": t("爆发型", "Bold"),
-    "默认":   t("默认", "Default"),
-}
-PRESET_HELP = {
-    "保守型": t("A 0.30 / T 0.30 / C 0.20 / N 0.10 / M 0.10 — 重吸引力 + 稳定，低风险长期投入",
-               "A 0.30 / T 0.30 / C 0.20 / N 0.10 / M 0.10 — emphasizes attractiveness + stability, low-risk long-term play"),
-    "增长型": t("N 0.25 / M 0.25 / C 0.20 / A 0.15 / T 0.15 — 重新品 + 动能 + 开放度",
-               "N 0.25 / M 0.25 / C 0.20 / A 0.15 / T 0.15 — emphasizes new products + momentum + openness"),
-    "爆发型": t("M 0.35 / N 0.25 / C 0.20 / A 0.15 / T 0.05 — 重短期动能 + 新品爆发",
-               "M 0.35 / N 0.25 / C 0.20 / A 0.15 / T 0.05 — emphasizes short-term momentum + new-product breakout"),
-    "默认":   t("A 0.25 / C 0.25 / N 0.20 / M 0.15 / T 0.15 — 业务默认",
-               "A 0.25 / C 0.25 / N 0.20 / M 0.15 / T 0.15 — business default"),
+# 默认权重（= scoring_config_v3.yaml dimension_weights；文件缺失时的兜底值）
+DEFAULT_WEIGHTS_C = {
+    "score_market_size_c": 0.40,
+    "score_openness_c":    0.35,
+    "score_stability_c":   0.25,
 }
 
-# 优先级类型（=Tier，Overall Rating）：5 档配色 + 顺序 + 展示简称
+# 优先级类型（=Tier_c，Overall Rating）：5 档配色 + 顺序 + 展示简称（与原页一致）
 TIER_COLOR = {
     "高潜机会类目": "#27ae60",  # 绿（最优）
     "较高机会类目": "#9b59b6",  # 紫
@@ -94,7 +72,7 @@ TIER_COLOR = {
     "暂不考虑类目": "#8d949b",  # 灰（最不重要）
 }
 TIER_ORDER = ["高潜机会类目", "较高机会类目", "中性观察类目", "谨慎评估类目", "暂不考虑类目"]
-TIER_LABEL = {  # 占比图/柱图展示用简称
+TIER_LABEL = {
     "高潜机会类目": t("高潜机会", "Top"),
     "较高机会类目": t("较高机会", "High"),
     "中性观察类目": t("中性观察", "Balanced"),
@@ -102,7 +80,7 @@ TIER_LABEL = {  # 占比图/柱图展示用简称
     "暂不考虑类目": t("暂不考虑", "Skip"),
 }
 
-# Tier 阈值（= scoring_config.yaml tier_thresholds）
+# Tier 阈值（百分位，同 scoring_config tier_thresholds）
 TIER_THRESHOLDS = [
     (0.80, "高潜机会类目"),
     (0.60, "较高机会类目"),
@@ -115,31 +93,31 @@ FLAG_BOTTOM_PCT = 0.10
 
 
 @st.cache_data
-def load_default_weights():
-    """默认权重（= 生产 v2 dimension_weights，Demo 内联）"""
-    return dict(DEFAULT_WEIGHTS)
+def load_default_weights_c():
+    """默认权重（= scoring_config_v3.yaml dimension_weights；Demo 内联，无 yaml/config 依赖）
+    市场吸引力 0.40 / 市场开放度 0.35 / 结构稳定 0.25。"""
+    return dict(DEFAULT_WEIGHTS_C)
 
 
 @st.cache_data
-def load_scoring():
-    """从 category_summary 读评分。
-    过滤：仅主类目（is_subcategory=0），且评分非 NULL。
-    """
+def load_scoring_c():
+    """从 db.category_summary 读方案C 评分（*_c 后缀列，由方案C 引擎写入）。
+    过滤：仅主类目（is_subcategory=0），且 composite_score_c 非 NULL（排除 Excluded）。"""
     conn = connect_demo()
     df = pd.read_sql(
         "SELECT category, "
-        "score_market_size, score_openness, score_new_product, "
-        "score_momentum, score_stability, "
-        "composite_score, is_pareto, tier, flag, "
-        "days_observed "
+        "score_market_size_c, score_openness_c, score_stability_c, "
+        "base_score_c, nr_ms_pen_c, bonus_c, composite_score_c, "
+        "tier_c, positive_signals_c, risk_signal_c "
         "FROM category_summary "
         "WHERE COALESCE(is_subcategory,0)=0 "
-        "  AND composite_score IS NOT NULL",
+        "  AND composite_score_c IS NOT NULL",
         conn,
     )
+    conn.close()
     if df.empty:
         return None, None
-    return df, "category_summary"
+    return df, "db.category_summary (方案C · *_c)"
 
 
 def assign_tier(scores: pd.Series) -> pd.Series:
@@ -164,15 +142,19 @@ def assign_flag(scores: pd.Series) -> pd.Series:
 
 
 def recompute(df, weights):
-    """按权重重算 composite_score + tier(=Overall Rating) + flag；保持原始分（不 min-max）。"""
+    """方案C 重算：基础分 = 3 维分按滑块权重加权 ×100；综合机会分 = 基础分 + bonus_c。
+    bonus_c 固定（不随滑块变）；tier 按综合机会分百分位重算。
+    positive_signals_c / risk_signal_c 是结构事实、不随权重变，静态来自 db。"""
     w = pd.Series(weights)
     s = w.sum()
     w = w / s if s > 0 else pd.Series([1.0 / len(DIM_COLS)] * len(DIM_COLS), index=DIM_COLS)
-    score = (df[DIM_COLS] * w[DIM_COLS].values).sum(axis=1)
+    base = (df[DIM_COLS] * w[DIM_COLS].values).sum(axis=1) * 100.0
+    bonus = df["bonus_c"].fillna(0.0)
     out = df.copy()
-    out["composite_score"] = score
-    out["tier"] = assign_tier(score)
-    out["flag"] = assign_flag(score)
+    out["base_score_c"] = base
+    out["composite_score_c"] = base + bonus
+    out["tier_c"] = assign_tier(out["composite_score_c"])
+    out["flag"] = assign_flag(out["composite_score_c"])
     return out
 
 
@@ -181,67 +163,45 @@ def recompute(df, weights):
 # -----------------------------------------------------------------------
 page_title(t("类目综合评分", "Composite Score"))
 
-df, source_name = load_scoring()
+df, source_name = load_scoring_c()
 if df is None:
-    st.error(t("category_summary 没有评分数据", "No scoring data in category_summary."))
+    st.error(t("db.category_summary 没有 *_c评分数据，请先运行 v3 评分引擎写入 *_c 列",
+               "No Plan-C (*_c) scoring data in db.category_summary. Run the v3 scoring engine to write the *_c columns first."))
     st.stop()
 
-# 页面副标题
-st.markdown(
-    "<div style='color:#6b7280; font-size:0.85rem; margin: 4px 0 16px 0;'>"
-    + t("注：Demo 数据已匿名化（Category A~R）",
-        "Note: demo data is anonymized (Category A~R)")
-    + "</div>",
-    unsafe_allow_html=True,
-)
-
-# 各项评分「衡量什么」的直白说明（默认展开，只说衡量什么，不写计算公式/字段）
+# 各项评分「衡量什么」的直白说明（方案C：3 维基础分 + 新品Bonus）
 with st.expander(t("ℹ️ 各项评分衡量什么", "ℹ️ What each score measures"), expanded=True):
     st.markdown(
         "<div style='font-size:0.8rem; color:#4b5563; line-height:1.7;'>"
-        + "<b>" + t("综合机会分", "Composite Score") + "</b> — "
-        + t("基于市场吸引力、市场开放度、新品空间、增长动能、结构稳定 5 个维度构建评分模型，用来给类目排优先级，分越高越值得优先考虑。",
-            "a scoring model built on five dimensions (market attractiveness, openness, new-product room, momentum, stability) to rank category priority; higher means more worth prioritizing.")
+        + "<b>" + t("综合得分", "Composite Score") + "</b> = "
+        + t("基础分（市场吸引力 + 市场开放度 + 结构稳定）+ 新品成长分。",
+            "base score (market attractiveness + openness + stability) + new-product growth.")
         + "<br><b>" + t("市场吸引力", "Market Attractiveness") + "</b> — "
         + t("有没有市场？", "Is there a market?")
         + "<br><b>" + t("市场开放度", "Openness") + "</b> — "
         + t("能不能进入？", "Can you get in?")
-        + "<br><b>" + t("新品空间", "New-Product Room") + "</b> — "
-        + t("新品能不能成长？", "Can new products grow?")
-        + "<br><b>" + t("增长动能", "Momentum") + "</b> — "
-        + t("有没有正在上升的产品？", "Are products on the rise?")
         + "<br><b>" + t("结构稳定", "Stability") + "</b> — "
         + t("市场波动性大不大？", "How volatile is the market?")
+        + "<br><b>" + t("新品成长", "New-Product Growth") + "</b> — "
+        + t("有没有新品在爆发？这段时间新品卖爆、冲上飙升榜的类目，综合分会额外加分——冲得越猛，加得越多（最多 +6）。",
+            "Any new products taking off? Categories with new products surging onto the Movers & Shakers list get extra points—the stronger the surge, the more (up to +6).")
         + "</div>",
         unsafe_allow_html=True,
     )
 
-default_w = load_default_weights()
-PRESETS["默认"] = default_w  # 默认权重 → 最后一个 preset 按钮
+default_w = load_default_weights_c()
 
-# 防止 hot reload / 旧 session 残留导致按钮误高亮（bump 版本号时强制清 active + 所有 w_*）
-if st.session_state.get("_page4b_v") != 1:
+# 防止 hot reload / 旧 session 残留（bump 版本号时强制清所有 w_*_c）
+if st.session_state.get("_page4c_v") != 1:
     for _k in list(st.session_state.keys()):
-        if _k.startswith("w_") or _k == "active_preset":
+        if _k.startswith("w_") and _k.endswith("_c"):
             del st.session_state[_k]
-    st.session_state["_page4b_v"] = 1
+    st.session_state["_page4c_v"] = 1
 
-# 检测：如果 active preset 跟当前 weights 不再匹配（用户拖了 slider），自动取消激活
-if st.session_state.get("active_preset"):
-    _ap = st.session_state["active_preset"]
-    _target = PRESETS.get(_ap)
-    if _target:
-        for _c, _v in _target.items():
-            _cur = st.session_state.get(f"w_{_c}")
-            if _cur is not None and abs(float(_cur) - float(_v)) > 1e-6:
-                st.session_state["active_preset"] = None
-                break
-
-# 预设按钮字号 + active 按钮右上角 × badge（::after 伪元素，相对 button 定位绝对不会跑）
+# 单个「默认」按钮字号 + 撑满 column（样式对齐原页快速预设按钮：1/4 宽、小字号）
 st.markdown(
     """
     <style>
-      /* 4 个 preset 按钮字号 + 撑满 column */
       [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stButton"] button,
       [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stButton"] button p {
           font-size: 0.60rem !important;
@@ -251,70 +211,42 @@ st.markdown(
           min-height: 0 !important;
           line-height: 1.4 !important;
           width: 100% !important;
-          position: relative !important;   /* 让 ::after 锚到 button 自己 */
-          overflow: visible !important;     /* 让 ::after 突出按钮边界 */
-      }
-
-      /* active 按钮（kind=primary）右上角 × badge — close badge 风格 */
-      [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stButton"] button[kind="primary"]::after {
-          content: "×";
-          position: absolute;
-          top: -6px;
-          right: -6px;
-          width: 14px;
-          height: 14px;
-          line-height: 12px;
-          border-radius: 50%;
-          background: #ffffff;
-          color: #475569;
-          font-size: 11px;
-          font-weight: 700;
-          text-align: center;
-          border: 1px solid #cbd5e1;
-          box-shadow: 0 1px 2px rgba(0,0,0,0.15);
-          box-sizing: border-box;
-          pointer-events: none;
       }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# --- 侧边栏：模型权重设置 ---
+# --- 侧边栏：模型权重设置（方案C：3 维滑块 + 单个「默认」按钮）---
 with st.sidebar:
     st.header(t("模型权重设置", "Model Weight Settings"))
     st.markdown(
         '<div style="color:#9ca3af; font-size:0.7rem; margin-top:-6px; margin-bottom:14px; line-height:1.3;">'
-        + t("调整权重偏好，动态计算类目综合机会分",
-            "Adjust weight preferences to dynamically compute the category opportunity score")
+        + t("根据策略偏好调整维度权重",
+            "Adjust dimension weights by strategy preference")
         + '</div>',
         unsafe_allow_html=True,
     )
 
-    # 4 个快速预设；激活态主按钮 primary 高亮 + X 浮到 column 右上角（CSS 绝对定位）
-    st.markdown(
-        '<div style="font-size:0.85rem; font-weight:600; color:#2c3e50; margin: 4px 0 16px 0;">'
-        + t("快速预设", "Quick Presets")
-        + '</div>',
-        unsafe_allow_html=True,
+    # 单个「默认」按钮：样式/大小对齐原页快速预设按钮，位置放 st.columns(4) 最右列（同原版「默认」位）。
+    # type 随「当前权重是否等于默认」变色：== 默认 → primary(蓝，含首次加载 session 未设时)；
+    # 拖滑块偏离 → secondary(灰)。点击重置回 scoring_config_v3.yaml 默认权重 → 变蓝。
+    _is_default = all(
+        (st.session_state.get(f"w_{c}") is None)
+        or (abs(float(st.session_state[f"w_{c}"]) - float(default_w.get(c, 1.0 / len(DIM_COLS)))) <= 1e-6)
+        for c in DIM_COLS
     )
     pcols = st.columns(4)
-    active_preset = st.session_state.get("active_preset")
-    for i, pname in enumerate(PRESETS.keys()):
-        is_active = (active_preset == pname)
-        with pcols[i]:
-            btn_type = "primary" if is_active else "secondary"
-            tip = PRESET_HELP[pname] + (t("（再次点击取消）", " (click again to deselect)") if is_active else "")
-            if st.button(PRESET_LABELS[pname], key=f"preset_{pname}", type=btn_type,
-                         help=tip, use_container_width=True):
-                if is_active:
-                    # 再次点击 active 按钮 = 取消激活
-                    st.session_state["active_preset"] = None
-                else:
-                    st.session_state["active_preset"] = pname
-                    for c, v in PRESETS[pname].items():
-                        st.session_state[f"w_{c}"] = v
-                st.rerun()
+    with pcols[3]:
+        if st.button(t("默认", "Default"),
+                     key="reset_weights_c",
+                     type=("primary" if _is_default else "secondary"),
+                     use_container_width=True,
+                     help=t("重置为默认权重（A 0.40 / C 0.35 / T 0.25）",
+                            "Reset to default weights (A 0.40 / C 0.35 / T 0.25)")):
+            for c in DIM_COLS:
+                st.session_state[f"w_{c}"] = float(default_w.get(c, 1.0 / len(DIM_COLS)))
+            st.rerun()
 
     st.markdown('<div style="height:14px;"></div>', unsafe_allow_html=True)
 
@@ -323,122 +255,100 @@ with st.sidebar:
         weights[c] = st.slider(
             DIM_LABELS[c],
             0.0, 1.0,
-            float(default_w.get(c, 0.2)),
+            float(default_w.get(c, 1.0 / len(DIM_COLS))),
             0.01,
             key=f"w_{c}",
             help=DIM_TOOLTIPS[c],
         )
-    total = sum(weights.values())
-    st.metric(t("权重总和（自动归一化）", "Weight Sum (auto-normalized)"), f"{total:.2f}")
 
-ranked = recompute(df, weights).sort_values("composite_score", ascending=False)
+ranked = recompute(df, weights).sort_values("composite_score_c", ascending=False)
 
-# -----------------------------------------------------------------------
-# 派生量（n_total / avg_score 用于 Top10 基准虚线）
-# -----------------------------------------------------------------------
-n_total = len(ranked)
-avg_score = ranked["composite_score"].mean()      # 全部类目综合分均分 → Top10 基准虚线
+col_cat = t("类目", "Category")
+col_base = t("基础分", "Base Score")
+col_bonus = t("新品成长分", "New-Product Growth")
+col_comp = t("综合得分", "Composite Score")
+col_tier = t("优先级类型", "Priority Type")
+col_driver = t("主驱动因素", "Main Driver")
+
+n_cat = len(ranked)
+bonus_vals = ranked["bonus_c"].fillna(0.0)
+comp_max = float(ranked["composite_score_c"].max()) if n_cat else 1.0
 
 # =======================================================================
-# 上方（全宽）：类目优先级类型分布树状图 — 总体类目分布（放大）
+# 类目得分表（5 列）：类目 | 基础分 | 新品成长分 | 综合得分 | 优先级类型
+#   综合得分列 = 表内条形：Styler linear-gradient 背景，长度∝得分、颜色=该行 tier_c 色
+#   （与优先级色块同套 TIER_COLOR），数值(.1f)叠在条上；优先级类型列 = 纯 tier 色块。
+#   linear-gradient 须 HTML 渲染（st.dataframe 不认），故 styler.to_html() + st.markdown。
+#   按综合得分降序（ranked 已排）；随权重实时重算 → tier_c 变 → 条色/色块同步变。
 # =======================================================================
-chart_title(t("● 类目优先级类型分布", "● Category Priority-Type Distribution"))
+chart_title(t("● 类目得分表", "● Category Score Table"))
+
+# 主驱动因素 = 三维中「维度分 × 当前权重」贡献最大的那维（随滑块实时变）；带 icon 便于分辨
+_DRV_ICON = {"score_market_size_c": "💵", "score_openness_c": "🔓", "score_stability_c": "⚓"}  # 绿钞/金锁/蓝锚，三色分明
+_wser = pd.Series(weights)
+_driver = (ranked[DIM_COLS].mul(_wser[DIM_COLS].values, axis=1)
+           .idxmax(axis=1)
+           .map(lambda d: f"{_DRV_ICON[d]} {DIM_LABELS[d].rsplit(' (', 1)[0]}"))
+tbl = ranked.copy()
+tbl["bonus_c"] = bonus_vals
+tbl["_driver"] = _driver
+tbl = tbl[["category", "base_score_c", "bonus_c", "composite_score_c", "tier_c", "_driver"]].copy()
+tbl.columns = [col_cat, col_base, col_bonus, col_comp, col_tier, col_driver]
+
+
+def _lighten(hex_color, factor=0.82):
+    """向白色混合（factor = 白色占比）得浅色版：#27ae60 → 淡绿。"""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    r = int(r + (255 - r) * factor)
+    g = int(g + (255 - g) * factor)
+    b = int(b + (255 - b) * factor)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _tier_bg(v):
+    color = TIER_COLOR.get(v, "")
+    if not color:
+        return ""
+    # 优先级类型单元格用对应 tier 的浅色版 + 深色文字（比满色柔和，仍可区分档位）
+    return f"background-color:{_lighten(color)}; color:#1f2937; font-weight:600; text-align:center;"
+
+
+def _comp_bar(row):
+    """逐行：只给「综合得分」单元格设 linear-gradient 表内条形（颜色=该行 tier 色）。"""
+    styles = ["" for _ in row.index]
+    color = TIER_COLOR.get(row[col_tier], "#8d949b")
+    pct = (row[col_comp] / comp_max * 100.0) if comp_max > 0 else 0.0
+    pct = max(0.0, min(100.0, pct))
+    styles[row.index.get_loc(col_comp)] = (
+        f"background:linear-gradient(90deg, {color} {pct:.1f}%, #eef0f2 {pct:.1f}%);"
+        " color:#1f2937; font-weight:600;"
+    )
+    return styles
+
+
+styler = (
+    tbl.style
+    .format({col_base: "{:.1f}", col_bonus: "{:.0f}", col_comp: "{:.1f}"})
+    .apply(_comp_bar, axis=1)
+    .map(_tier_bg, subset=[col_tier])
+    .hide(axis="index")
+    .set_table_attributes('class="score-table"')
+)
+
 st.markdown(
-    "<div style='font-size:0.70rem; color:#6b7280; font-weight:400; "
-    "margin: -4px 0 8px 4px; line-height:1.3;'>"
-    + t("外层=优先级类型（括号内为品类数）· 内层=品类 · 块大小∝综合分 · 悬停看精确值",
-        "Outer = priority type (count in parens) · inner = category · "
-        "tile size ∝ composite score · hover for exact value")
-    + "</div>",
+    """
+    <style>
+      table.score-table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+      table.score-table thead th {
+          background: #f3f4f6; color: #374151; font-weight: 600;
+          text-align: left; padding: 7px 12px; border-bottom: 2px solid #d1d5db;
+      }
+      table.score-table tbody td {
+          padding: 6px 12px; border-bottom: 1px solid #eceef1; white-space: nowrap;
+      }
+    </style>
+    """,
     unsafe_allow_html=True,
 )
-seg = ranked.copy()
-# 按优先级顺序排序（高潜→较高→中性→谨慎→暂不考虑），配合 treemap sort=False
-_ord = {tl: i for i, tl in enumerate(TIER_ORDER)}
-seg = (seg.assign(_ord=seg["tier"].map(_ord))
-          .sort_values("_ord", kind="stable")
-          .drop(columns="_ord"))
-seg["tier_label"] = seg["tier"].map(TIER_LABEL)
-counts = seg["tier_label"].value_counts()
-seg["tier_disp"] = seg["tier_label"].map(lambda x: f"{x} ({counts[x]})")
-
-fig = px.treemap(
-    seg,
-    path=["tier_disp", "category"],     # 不要根节点「全部类目」→ 无背景块、无根标签
-    values="composite_score",            # 块面积 ∝ 综合分（得分越高块越大）
-    color="tier", color_discrete_map=TIER_COLOR,  # 颜色按优先级类型（全名键），稳定
-    custom_data=["composite_score"],
-    height=560,
-)
-fig.update_traces(
-    sort=False,  # 保持数据顺序（按优先级 高潜→暂不考虑），不按数值重排
-    texttemplate="%{label}",
-    textfont=dict(size=13),
-    insidetextfont=dict(color="white", size=13),       # 彩色块上统一白字
-    marker=dict(line=dict(color="white", width=1.5)),  # 块间分隔线白
-    hovertemplate=(
-        "<b>%{label}</b><br>"
-        + t("综合机会分：", "Opportunity Score: ") + "%{customdata[0]:.3f}<extra></extra>"
-    ),
-)
-fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
-st.plotly_chart(fig, width="stretch")
-
-# =======================================================================
-# 下方：左 = Top 10 机会类目排名（横向条形）；右 = Top 3 五维画像
-# =======================================================================
-bl, br = st.columns([1.4, 1])
-
-with bl:
-    chart_title(t("● Top 10 机会类目排名（综合分 · 条色=优先级类型）",
-                  "● Top 10 Opportunity Categories (composite · bar color = priority type)"))
-    top10 = ranked.head(10).copy()
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        y=top10["category"], x=top10["composite_score"],
-        orientation="h",
-        marker=dict(color=[TIER_COLOR.get(tr, "#bbbbbb") for tr in top10["tier"]]),
-        name=t("综合分", "Composite Score"),
-        text=top10["composite_score"].round(2), textposition="outside",
-        hovertemplate="<b>%{y}</b><br>" + t("综合分：", "Composite: ") + "%{x:.3f}<extra></extra>",
-    ))
-    # 全部类目综合分均分基准虚线（横向条形 → 竖虚线 x=均分）
-    fig.add_vline(
-        x=avg_score, line_dash="dash", line_color="#374151", line_width=1.5,
-        annotation_text=t(f"均分 {avg_score:.2f}", f"avg {avg_score:.2f}"),
-        annotation_position="top",
-        annotation_font=dict(size=11, color="#374151"),
-    )
-    fig.update_layout(
-        height=440, margin=dict(l=10, r=46, t=24, b=20),
-        xaxis=dict(title=t("综合分", "Composite Score"), range=[0, 1]),   # 从 0 起，诚实
-        yaxis=dict(autorange="reversed", automargin=True),                # 第 1 名在最上
-        showlegend=False,
-    )
-    st.plotly_chart(fig, width="stretch")
-
-with br:
-    chart_title(t("● Top 3 综合分类目 · 5 维画像", "● Top 3 Categories · 5-Factor Profile"))
-    top3_df = ranked.head(3)
-    radar_dims = DIM_COLS
-    # 去掉末尾的 " (X)" 缩写后缀，中英文均适用（中文取前段，英文保留完整词组）
-    radar_labels = [DIM_LABELS[d].rsplit(" (", 1)[0] for d in radar_dims]
-    fig = go.Figure()
-    palette = ["#27ae60", "#3498db", "#e67e22"]
-    for i, (_, row) in enumerate(top3_df.iterrows()):
-        vals = [row[d] for d in radar_dims]
-        fig.add_trace(go.Scatterpolar(
-            r=vals + [vals[0]],
-            theta=radar_labels + [radar_labels[0]],
-            fill="toself",
-            name=row["category"],
-            line=dict(color=palette[i], width=2),
-            opacity=0.55,
-        ))
-    fig.update_layout(
-        polar=dict(radialaxis=dict(range=[0, 1], showticklabels=True, tickfont=dict(size=9))),
-        showlegend=True, height=440,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.18, xanchor="center", x=0.5, font=dict(size=10)),
-        margin=dict(l=60, r=75, t=30, b=25),
-    )
-    st.plotly_chart(fig, width="stretch")
+st.markdown(styler.to_html(), unsafe_allow_html=True)
