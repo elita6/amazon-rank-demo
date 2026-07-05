@@ -1,5 +1,5 @@
 # streamlit_app/pages/4_类目综合评分.py
-# 更新日期：2026-07-04
+# 更新日期：2026-07-05
 # Demo 适配：数据源 data/amazon.db → data/*.csv（_demo_data.connect_demo）；类目已匿名化；
 #   无 config 目录 → 默认权重内联（A0.40/C0.35/T0.25），删 yaml 读取；读 *_c 后缀评分列（由 demo CSV 提供）。
 # 原文件：v3/streamlit_app/pages/4_类目综合评分.py（方案C 对照版：3 维基础分 + 新品Bonus）
@@ -7,6 +7,10 @@
 # 用途：类目综合评分「方案C 对照版」— 复制自 4_类目综合评分.py，原页一字不动便于 A/B 对照。
 #       方案C 评分口径：3 维基础分 + 新品Bonus（读 DB 的 *_c 后缀列）。
 # 主要改动（相对原页，均为方案C 定制）：
+#   - 2026-07-05（同步生产 v3）：① 权重滑块改百分比显示（40%，int 0~100 + format="%d%%"，key=wp_*_c）+
+#       侧栏加「总和 X% ✔/❗」文字提示（三者之和不必=100，引擎按比例折算）；session 版本号 bump 到 7。
+#       ② 类目得分表「优先级类型」列过 TIER_LABEL 映射，英文模式正确显示 Top/High/…（仅改显示文本、不影响取色）。
+#       ③ 「新品成长分」英文 New-Product Growth → New-Product Growth Bonus（加分项语义更准）。
 #   - 2026-07-03（精简版·聚焦得分表）：
 #       ① 删「衡量什么」里的 S+8/M+4 文字标签；新品机会分只显示原始数字 0/3/6；维度说明改直白版。
 #       ② 类目得分表（5 列）：类目|基础分|新品成长分|综合得分|优先级类型；综合得分 = 表内条形
@@ -175,7 +179,7 @@ with st.expander(t("ℹ️ 各项评分衡量什么", "ℹ️ What each score me
         "<div style='font-size:0.8rem; color:#4b5563; line-height:1.7;'>"
         + "<b>" + t("综合得分", "Composite Score") + "</b> = "
         + t("基础分（市场吸引力 + 市场开放度 + 结构稳定）+ 新品成长分。",
-            "base score (market attractiveness + openness + stability) + new-product growth.")
+            "base score (market attractiveness + openness + stability) + new-product growth bonus.")
         + "<br><b>" + t("市场吸引力", "Market Attractiveness") + "</b> — "
         + t("有没有市场？", "Is there a market?")
         + "<br><b>" + t("市场开放度", "Openness") + "</b> — "
@@ -191,12 +195,14 @@ with st.expander(t("ℹ️ 各项评分衡量什么", "ℹ️ What each score me
 
 default_w = load_default_weights_c()
 
-# 防止 hot reload / 旧 session 残留（bump 版本号时强制清所有 w_*_c）
-if st.session_state.get("_page4c_v") != 1:
+# 防止 hot reload / 旧 session 残留（bump 版本号时强制清旧权重键 w_/wp_ *_c + 自动维/移动记录）
+if st.session_state.get("_page4c_v") != 7:
     for _k in list(st.session_state.keys()):
-        if _k.startswith("w_") and _k.endswith("_c"):
+        if (_k.startswith("w_") or _k.startswith("wp_")) and _k.endswith("_c"):
             del st.session_state[_k]
-    st.session_state["_page4c_v"] = 1
+    st.session_state.pop("auto_dim_c", None)
+    st.session_state.pop("_last_moved_c", None)
+    st.session_state["_page4c_v"] = 7
 
 # 单个「默认」按钮字号 + 撑满 column（样式对齐原页快速预设按钮：1/4 宽、小字号）
 st.markdown(
@@ -228,44 +234,68 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    # 单个「默认」按钮：样式/大小对齐原页快速预设按钮，位置放 st.columns(4) 最右列（同原版「默认」位）。
-    # type 随「当前权重是否等于默认」变色：== 默认 → primary(蓝，含首次加载 session 未设时)；
-    # 拖滑块偏离 → secondary(灰)。点击重置回 scoring_config_v3.yaml 默认权重 → 变蓝。
-    _is_default = all(
-        (st.session_state.get(f"w_{c}") is None)
-        or (abs(float(st.session_state[f"w_{c}"]) - float(default_w.get(c, 1.0 / len(DIM_COLS)))) <= 1e-6)
-        for c in DIM_COLS
-    )
+    # 默认权重（整数百分比）：分数 ×100 四舍五入；A/C/T 默认 40/35/25，∑=100。
+    _initpct = {c: int(round(float(default_w.get(c, 1.0 / len(DIM_COLS))) * 100)) for c in DIM_COLS}
+
+    # 单个「默认」按钮：type 随「是否等于默认」变色（primary 蓝 / secondary 灰）。
+    _is_default = all(int(st.session_state.get(f"wp_{c}", _initpct[c])) == _initpct[c] for c in DIM_COLS)
     pcols = st.columns(4)
     with pcols[3]:
         if st.button(t("默认", "Default"),
                      key="reset_weights_c",
                      type=("primary" if _is_default else "secondary"),
                      use_container_width=True,
-                     help=t("重置为默认权重（A 0.40 / C 0.35 / T 0.25）",
-                            "Reset to default weights (A 0.40 / C 0.35 / T 0.25)")):
+                     help=t(f"重置为默认权重（A {_initpct['score_market_size_c']}% / C {_initpct['score_openness_c']}% / T {_initpct['score_stability_c']}%）",
+                            f"Reset to default weights (A {_initpct['score_market_size_c']}% / C {_initpct['score_openness_c']}% / T {_initpct['score_stability_c']}%)")):
             for c in DIM_COLS:
-                st.session_state[f"w_{c}"] = float(default_w.get(c, 1.0 / len(DIM_COLS)))
+                st.session_state[f"wp_{c}"] = int(_initpct[c])
             st.rerun()
 
-    st.markdown('<div style="height:14px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
 
-    weights = {}
+    # 总和指示器（渲染在滑块上方）：placeholder 先占位，滑块实例化后回填计算值。
+    total_ph = st.empty()
+
+    # 3 维滑块：百分比显示（40%），int 0~100 + format="%d%%"；完全独立、无回调/无联动。
+    # 注：滑块「按住拖不动」是浏览器缩放≠100% 的已知问题（Ctrl+0 复位即可），与本参数无关。
+    # 三者之和不必等于 100：引擎会自动按比例折算（归一化）；上方指示器仅作提示、不强制。
+    _pct = {}
     for c in DIM_COLS:
-        weights[c] = st.slider(
+        _pct[c] = st.slider(
             DIM_LABELS[c],
-            0.0, 1.0,
-            float(default_w.get(c, 1.0 / len(DIM_COLS))),
-            0.01,
-            key=f"w_{c}",
+            0, 100,
+            int(_initpct[c]),
+            1,
+            format="%d%%",
+            key=f"wp_{c}",
             help=DIM_TOOLTIPS[c],
+        )
+
+    weights = {c: _pct[c] / 100.0 for c in DIM_COLS}
+
+    _total = sum(_pct.values())
+    if _total == 100:
+        total_ph.markdown(
+            '<div style="font-size:0.78rem; font-weight:600; color:#16a34a; margin-bottom:8px;">'
+            + t("总和 100% ✔", "Total 100% ✔") + '</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        total_ph.markdown(
+            '<div style="margin-bottom:8px;">'
+            '<span style="font-size:0.78rem; font-weight:600; color:#d97706;">'
+            + t(f"总和 {_total}% ❗", f"Total {_total}% ❗") + '</span>'
+            '<div style="font-size:0.68rem; color:#d97706; margin-top:1px;">'
+            + t("建议凑到 100%（未凑齐时系统会按比例自动折算）",
+                "Aim for 100% (otherwise weights are auto-scaled proportionally)") + '</div></div>',
+            unsafe_allow_html=True,
         )
 
 ranked = recompute(df, weights).sort_values("composite_score_c", ascending=False)
 
 col_cat = t("类目", "Category")
 col_base = t("基础分", "Base Score")
-col_bonus = t("新品成长分", "New-Product Growth")
+col_bonus = t("新品成长分", "New-Product Growth Bonus")
 col_comp = t("综合得分", "Composite Score")
 col_tier = t("优先级类型", "Priority Type")
 col_driver = t("主驱动因素", "Main Driver")
@@ -329,7 +359,8 @@ def _comp_bar(row):
 
 styler = (
     tbl.style
-    .format({col_base: "{:.1f}", col_bonus: "{:.0f}", col_comp: "{:.1f}"})
+    .format({col_base: "{:.1f}", col_bonus: "{:.0f}", col_comp: "{:.1f}",
+             col_tier: lambda v: TIER_LABEL.get(v, v)})
     .apply(_comp_bar, axis=1)
     .map(_tier_bg, subset=[col_tier])
     .hide(axis="index")
