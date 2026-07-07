@@ -1,9 +1,11 @@
 # streamlit_app/pages/1_类目详情.py
-# 更新日期：2026-07-04
+# 更新日期：2026-07-07
 # 用途：类目详情（Demo 版，从 v3 移植）— 统一聚合口径后的描述性分析页。
 # Demo 适配：数据源 data/amazon.db → data/*.csv（_demo_data.connect_demo in-memory sqlite）；
-#   类目/品牌/ASIN 已匿名化（Category A~R / Brand_xxx）；CAT_SHORT/TEXT_POS 对 demo 类目无映射，
+#   类目/品牌/ASIN 已匿名化（Category A~E / Brand_xxx）；CAT_SHORT/TEXT_POS 对 demo 类目无映射，
 #   自动回退原名/默认方位，不影响逻辑；黑名单类目在 demo 数据生成时已剔除，去掉 excluded_categories。
+#   2026-07-07：demo 只节选 5 类目展示，但顶部 3 个 KPI（类目/ASIN/品牌数）改读 demo_meta.json
+#     的全量真实规模（demo_real_totals），并加一行小字说明「指标反映完整数据，本 demo 展示 5 个类目」。
 # 用途（原）：类目详情（精简新版）— 统一聚合口径后的描述性分析页。原页 类目详情.py 保留对照。
 #       结构：1.1 类目概览（表）+ 1.2 类目画像（基础分布 + 交叉分析）
 # 启动命令：streamlit run v2/streamlit_app/app.py
@@ -69,7 +71,7 @@ from _aggregate import (winsor_mean, demand_increment_index, demand_stock_index,
                         latest_review_repr, distribution_insights, crosslink_neg,
                         fmt_compact)
 from _brands import normalize_brand
-from _demo_data import connect_demo
+from _demo_data import connect_demo, demo_real_totals
 
 # 19 大类长名 → 短名（散点图 label 用，避免重叠；hover 仍显完整名）
 CAT_SHORT = {
@@ -176,6 +178,14 @@ _n_days = asin["date"].nunique()
 _date_min = str(asin["date"].min())[:10]
 _date_max = str(asin["date"].max())[:10]
 
+# Demo 适配：本 demo 只节选 5 类目展示，但类目/ASIN/品牌数 3 个 KPI 报「全量真实规模」
+# （data/demo_meta.json，生成脚本在子集化前按全量顶层类目算，与本页口径一致）。
+# 缺文件则回退当前子集实测值。日期范围/天数不受影响（子集仍覆盖同一采集期）。
+_real = demo_real_totals()
+_disp_n_cat = _real["n_categories"] if _real else len(main_cats)
+_disp_n_asin = _real["n_asin"] if _real else _n_asin
+_disp_n_brand = _real["n_brand"] if _real else _n_brand
+
 
 def _kpi(col, label, value, value_size="1.7rem", value_color="#222", value_weight="400"):
     col.markdown(
@@ -189,13 +199,23 @@ def _kpi(col, label, value, value_size="1.7rem", value_color="#222", value_weigh
 
 
 _kp1, _kp2, _kp3, _kp4 = st.columns(4)
-_kpi(_kp1, t("分析类目数", "Categories analyzed"),      f"{len(main_cats)}")
-_kpi(_kp2, t("ASIN 数(去重)", "ASINs (unique)"),   f"{_n_asin:,}")
-_kpi(_kp3, t("品牌数(去重)", "Brands (unique)"),    f"{_n_brand:,}")
+_kpi(_kp1, t("分析类目数", "Categories analyzed"),      f"{_disp_n_cat}")
+_kpi(_kp2, t("ASIN 数(去重)", "ASINs (unique)"),   f"{_disp_n_asin:,}")
+_kpi(_kp3, t("品牌数(去重)", "Brands (unique)"),    f"{_disp_n_brand:,}")
 _kpi(_kp4, t("数据时间范围", "Date range"),
      f"{_date_min} ~ {_date_max}"
      f"<div style='font-size:0.75rem; color:#9ca3af; margin-top:2px;'>({_n_days} {t('天', 'days')})</div>",
      value_size="0.85rem", value_color="#36383b")
+
+# 小字说明：KPI 是全量真实规模，正文/图表是本 demo 节选的 5 个类目（避免「18 类目 vs 表里 5 个」看着矛盾）
+if _real:
+    st.markdown(
+        f"<div style='font-size:0.75rem; color:#9ca3af; margin:-2px 0 4px 4px;'>"
+        + t(f"※ 上方指标反映完整数据规模；本 Demo 公开展示其中 {len(main_cats)} 个代表性类目。",
+            f"※ Metrics above reflect the full dataset; this demo showcases {len(main_cats)} representative categories.")
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 # =======================================================================

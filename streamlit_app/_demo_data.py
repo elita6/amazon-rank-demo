@@ -3,9 +3,12 @@
 # 用途：把 demo/data/*.csv 加载到 in-memory sqlite，让原 streamlit 页面 sqlite 查询零修改可用
 # 同时提供 inline 版 market_heat_index（避免依赖 core.analytics.indicators）
 # 主要改动：
+#   - 2026-07-07：新增 demo_real_totals() —— 读 data/demo_meta.json（全量真实规模：类目/
+#       去重 ASIN/归一化去重品牌数）。demo 只节选 5 类目展示，但顶部 KPI 用它报真实规模。
 #   - 2026-07-01：加载 asin_daily 时把占位串 brand='Brand_NA' 置空（对齐生产 brand 缺失的
 #       None 语义），避免其归一化成 "brandna" 被当成巨型品牌污染品牌集中度；产品行保留计入体量。
 
+import json
 from pathlib import Path
 import sqlite3
 
@@ -61,6 +64,20 @@ def connect_demo(_path_ignored=None):
     _path_ignored 保留位参兼容，让改动最小。
     """
     return _DemoConn(_build_memory_db())
+
+
+@st.cache_data(show_spinner=False)
+def demo_real_totals():
+    """全量真实规模（类目/去重 ASIN/归一化去重品牌数），读 data/demo_meta.json。
+    demo 只节选 5 类目展示，但顶部 KPI 用它报真实规模。缺文件/损坏 → None（页面回退子集值）。"""
+    p = DATA_DIR / "demo_meta.json"
+    if not p.exists():
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 def market_heat_index(df, top_n=100, review_col="review_count",
